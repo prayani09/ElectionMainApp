@@ -1,8 +1,9 @@
-// src/components/Upload.jsx
 import React, { useState, useRef } from 'react';
 import { parseExcelFile } from '../utils/excelParser';
 import { db, ref, set, push } from '../Firebase/config';
 import { UploadIcon } from 'lucide-react';
+import TranslatedText from './TranslatedText';
+import useAutoTranslate from '../hooks/useAutoTranslate';
 
 const Upload = ({ onUploadComplete }) => {
   const [uploading, setUploading] = useState(false);
@@ -10,6 +11,7 @@ const Upload = ({ onUploadComplete }) => {
   const [fileName, setFileName] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+  const { currentLanguage } = useAutoTranslate();
 
   const handleFileUpload = async (file) => {
     if (!file) return;
@@ -23,8 +25,7 @@ const Upload = ({ onUploadComplete }) => {
       const voterData = await parseExcelFile(file);
       const totalVoters = voterData.length;
       
-      // Optimized batch upload with Promise.all for parallel processing
-      const batchSize = 500; // Increased batch size
+      const batchSize = 500;
       const batches = [];
       
       for (let i = 0; i < voterData.length; i += batchSize) {
@@ -34,7 +35,6 @@ const Upload = ({ onUploadComplete }) => {
       let processed = 0;
       
       for (const batch of batches) {
-        // Upload batch in parallel
         const uploadPromises = batch.map(voter => {
           const newVoterRef = push(ref(db, 'voters'));
           return set(newVoterRef, voter);
@@ -100,7 +100,6 @@ const Upload = ({ onUploadComplete }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4 sm:p-6">
       <div className="max-w-2xl mx-auto">
-        {/* Glass effect card */}
         <div className="backdrop-blur-lg bg-white/70 rounded-2xl shadow-xl p-6 sm:p-8 border border-white/50">
           {/* Header */}
           <div className="text-center mb-8">
@@ -108,10 +107,10 @@ const Upload = ({ onUploadComplete }) => {
               <UploadIcon className="text-orange-500 font-bold" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-              Upload Voter Data
+              <TranslatedText>Upload Voter Data</TranslatedText>
             </h1>
             <p className="text-gray-600 text-sm sm:text-base">
-              Upload Excel files with voter information
+              <TranslatedText>Upload Excel files with voter information</TranslatedText>
             </p>
           </div>
 
@@ -157,18 +156,18 @@ const Upload = ({ onUploadComplete }) => {
                   uploading ? 'text-gray-600' : 'text-gray-800'
                 }`}>
                   {uploading ? (
-                    <>Uploading your file...</>
+                    <TranslatedText>Uploading your file...</TranslatedText>
                   ) : (
                     <>
                       <span className="text-orange-600 hover:text-orange-700 underline">
-                        Click to upload
+                        <TranslatedText>Click to upload</TranslatedText>
                       </span>{' '}
-                      or drag and drop
+                      <TranslatedText>or drag and drop</TranslatedText>
                     </>
                   )}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-500">
-                  {uploading ? fileName : 'Excel files (.xlsx, .xls, .csv) up to 1MB'}
+                  {uploading ? fileName : <TranslatedText>Excel files (.xlsx, .xls, .csv) up to 1MB</TranslatedText>}
                 </p>
               </div>
             </div>
@@ -180,7 +179,7 @@ const Upload = ({ onUploadComplete }) => {
                   <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  <p className="font-medium">Drop file here</p>
+                  <p className="font-medium"><TranslatedText>Drop file here</TranslatedText></p>
                 </div>
               </div>
             )}
@@ -202,7 +201,7 @@ const Upload = ({ onUploadComplete }) => {
                 ></div>
               </div>
               <p className="text-xs text-gray-500 text-center">
-                Processing data... Please don't close this window
+                <TranslatedText>Processing data... Please don't close this window</TranslatedText>
               </p>
             </div>
           )}
@@ -216,8 +215,12 @@ const Upload = ({ onUploadComplete }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p className="text-xs font-medium text-gray-700">Fast Upload</p>
-                <p className="text-xs text-gray-500">Optimized for speed</p>
+                <p className="text-xs font-medium text-gray-700">
+                  <TranslatedText>Fast Upload</TranslatedText>
+                </p>
+                <p className="text-xs text-gray-500">
+                  <TranslatedText>Optimized for speed</TranslatedText>
+                </p>
               </div>
               <div className="p-3 bg-white/50 rounded-lg">
                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -225,8 +228,12 @@ const Upload = ({ onUploadComplete }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
-                <p className="text-xs font-medium text-gray-700">Secure</p>
-                <p className="text-xs text-gray-500">Data protected</p>
+                <p className="text-xs font-medium text-gray-700">
+                  <TranslatedText>Secure</TranslatedText>
+                </p>
+                <p className="text-xs text-gray-500">
+                  <TranslatedText>Data protected</TranslatedText>
+                </p>
               </div>
               <div className="p-3 bg-white/50 rounded-lg">
                 <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -234,8 +241,12 @@ const Upload = ({ onUploadComplete }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <p className="text-xs font-medium text-gray-700">Mobile Ready</p>
-                <p className="text-xs text-gray-500">Fully responsive</p>
+                <p className="text-xs font-medium text-gray-700">
+                  <TranslatedText>Mobile Ready</TranslatedText>
+                </p>
+                <p className="text-xs text-gray-500">
+                  <TranslatedText>Fully responsive</TranslatedText>
+                </p>
               </div>
             </div>
           )}
