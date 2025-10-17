@@ -1,177 +1,109 @@
-// // src/App.jsx
-// import React, { useState } from 'react';
-// import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-// import Dashboard from './Components/Dashboard';
-// import FullVoterDetails from './Components/FullVoterDetails';
-// import Upload from './Components/Upload';
-
-// function App() {
-//   const [currentView, setCurrentView] = useState('upload');
-//   const [uploadComplete, setUploadComplete] = useState(false);
-
-//   const handleUploadComplete = (totalVoters) => {
-//     setUploadComplete(true);
-//     setCurrentView('dashboard');
-//   };
-
-//   return (
-//     <Router>
-//       <div className="App">
-//         {/* Navigation */}
-//         <nav className="bg-orange-600 text-white shadow-lg">
-//           <div className="max-w-7xl mx-auto px-4">
-//             <div className="flex justify-between items-center h-16">
-//               <div className="flex items-center">
-//                 <h1 className="text-xl font-bold">VoterData Pro</h1>
-//               </div>
-//               <div className="flex space-x-4">
-//                 <button
-//                   onClick={() => setCurrentView('upload')}
-//                   className={`px-4 py-2 rounded-lg transition-colors ${
-//                     currentView === 'upload' ? 'bg-orange-700' : 'hover:bg-orange-700'
-//                   }`}
-//                 >
-//                  <Link to="/upload">Upload</Link>
-//                 </button>
-//                 <button
-//                   onClick={() => setCurrentView('dashboard')}
-//                   className={`px-4 py-2 rounded-lg transition-colors ${
-//                     currentView === 'dashboard' ? 'bg-orange-700' : 'hover:bg-orange-700'
-//                   }`}
-//                 >
-//                   <Link to="/dashboard">Dashboard</Link>
-//                 </button>
-//               </div>
-//             </div>
-//           </div>
-//         </nav>
-
-//         <Routes>
-//           <Route 
-//             path="/upload" 
-//             element={<Upload onUploadComplete={handleUploadComplete} />} 
-//           />
-//           <Route path="/dashboard" element={<Dashboard />} />
-//           <Route path="/voter/:voterId" element={<FullVoterDetails />} />
-//           <Route 
-//             path="/" 
-//             element={<Navigate to={uploadComplete ? "/dashboard" : "/upload"} replace />} 
-//           />
-//         </Routes>
-//       </div>
-//     </Router>
-//   );
-// }
-
-// export default App;
-
-
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import useAutoTranslate from './hooks/useAutoTranslate';
+import Home from './Pages/Home';
 import Dashboard from './Components/Dashboard';
 import FullVoterDetails from './Components/FullVoterDetails';
 import Upload from './Components/Upload';
+import LanguageSelector from './Components/LanguageSelector';
 import './App.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload');
   const [uploadComplete, setUploadComplete] = useState(false);
-  const { currentLanguage, languages, changeLanguage, translating } = useAutoTranslate();
+  const [showLanguageModal, setShowLanguageModal] = useState(true);
+  const { currentLanguage, changeLanguage, translating } = useAutoTranslate();
+
+  useEffect(() => {
+    // Check if user has already selected language
+    const savedLanguage = localStorage.getItem('selectedLanguage');
+    if (savedLanguage) {
+      setShowLanguageModal(false);
+      changeLanguage(savedLanguage);
+    }
+  }, [changeLanguage]);
+
+  const handleLanguageSelect = (languageCode) => {
+    changeLanguage(languageCode);
+    localStorage.setItem('selectedLanguage', languageCode);
+    setShowLanguageModal(false);
+  };
 
   const handleUploadComplete = (totalVoters) => {
     setUploadComplete(true);
-    setCurrentView('dashboard');
   };
 
-  // Simple translation function for static text
+  // Simple translation function
   const t = (text) => {
     if (currentLanguage === 'en') return text;
-    // In a real app, you'd cache translations, but for simplicity we'll translate on demand
-    return text; // The HOC will handle actual translation
+    return text; // Actual translation handled by HOC
   };
 
   return (
     <Router>
-      <div className="App">
-        {/* Navigation */}
-        <nav className="bg-orange-600 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <h1 className="text-xl font-bold">
-                  {translating ? 'Translating...' : t('VoterData Pro')}
-                </h1>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                {/* Language Selector */}
-                <div className="relative group">
-                  <button className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-orange-700 transition-colors">
-                    <span>🌐</span>
-                    <span>{t('Language')}</span>
-                    <span>▼</span>
-                    {translating && <span className="animate-spin">⟳</span>}
-                  </button>
-                  
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border">
-                    {languages.map((lang) => (
-                      <button
-                        key={lang.code}
-                        onClick={() => changeLanguage(lang.code)}
-                        className={`w-full text-left px-4 py-3 hover:bg-gray-100 transition-colors ${
-                          currentLanguage === lang.code 
-                            ? 'bg-orange-100 text-orange-700' 
-                            : 'text-gray-800'
-                        } first:rounded-t-lg last:rounded-b-lg`}
-                        disabled={translating}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span className="text-lg">{lang.flag}</span>
-                          <span className="font-medium">{lang.name}</span>
-                          {currentLanguage === lang.code && (
-                            <span className="ml-auto text-orange-600">✓</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+      <div className="App bg-gradient-to-br from-amber-100 via-orange-50 to-yellow-100">
+        {/* Language Selection Modal */}
+        {showLanguageModal && (
+          <LanguageSelector onLanguageSelect={handleLanguageSelect} />
+        )}
 
-                {/* Navigation Links */}
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-orange-100 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              {/* Logo and App Name */}
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-l from bg-green-300 to-orange-400">
+                 <img src="/logo.png" alt="" className='rounded-full'/>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Vinod <span className='text-orange-500'>Mapari</span></h1>
+                  <p className="text-xs text-orange-600 font-medium">Prabhag 20</p>
+                </div>
+              </div>
+
+              {/* Language Selector */}
+              <div className="flex items-center space-x-4">
+                {translating && (
+                  <div className="flex items-center space-x-2 text-orange-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+                    <span className="text-sm font-medium">Translating...</span>
+                  </div>
+                )}
                 <button
-                  onClick={() => setCurrentView('upload')}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    currentView === 'upload' ? 'bg-orange-700' : 'hover:bg-orange-700'
-                  }`}
+                  onClick={() => setShowLanguageModal(true)}
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-orange-50 transition-colors duration-200 group"
+                  title="Change Language"
                 >
-                  <Link to="/upload">{t('Upload')}</Link>
-                </button>
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    currentView === 'dashboard' ? 'bg-orange-700' : 'hover:bg-orange-700'
-                  }`}
-                >
-                  <Link to="/dashboard">{t('Dashboard')}</Link>
+                  <svg className="w-5 h-5 text-gray-600 group-hover:text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-orange-600 hidden sm:block">
+                    {currentLanguage === 'en' ? 'English' : 
+                     currentLanguage === 'hi' ? 'Hindi' : 
+                     currentLanguage === 'mr' ? 'Marathi' : 'Language'}
+                  </span>
                 </button>
               </div>
             </div>
           </div>
-        </nav>
+        </header>
 
-        <Routes>
-          <Route 
-            path="/upload" 
-            element={<Upload onUploadComplete={handleUploadComplete} />} 
-          />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/voter/:voterId" element={<FullVoterDetails />} />
-          <Route 
-            path="/" 
-            element={<Navigate to={uploadComplete ? "/dashboard" : "/upload"} replace />} 
-          />
-        </Routes>
+        {/* Main Content */}
+        <main className="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route 
+              path="/upload" 
+              element={<Upload onUploadComplete={handleUploadComplete} />} 
+            />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/voter/:voterId" element={<FullVoterDetails />} />
+            <Route 
+              path="/home" 
+              element={<Navigate to="/" replace />} 
+            />
+          </Routes>
+        </main>
       </div>
     </Router>
   );
