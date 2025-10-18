@@ -19,10 +19,12 @@ import {
   FiMapPin,
   FiHash,
   FiCalendar,
+  FiStar,
 } from 'react-icons/fi';
-import { FaWhatsapp, FaRegFilePdf } from 'react-icons/fa';
+import { FaWhatsapp, FaRegFilePdf, FaShareAlt } from 'react-icons/fa';
+import { GiVote } from 'react-icons/gi';
 import TranslatedText from './TranslatedText';
-import { MarsIcon } from 'lucide-react';
+import { MarsIcon, VenusIcon } from 'lucide-react';
 
 const FullVoterDetails = () => {
   const { voterId } = useParams();
@@ -30,6 +32,17 @@ const FullVoterDetails = () => {
   const [voter, setVoter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [showShareOptions, setShowShareOptions] = useState(false);
+
+  // Sample political data - replace with your actual data
+  const politicalInfo = {
+    candidateName: "Rajesh Kumar",
+    partyName: "Bharatiya Janata Party",
+    partySymbol: "Lotus",
+    slogan: "Development for All",
+    contact: "+91-9876543210",
+    website: "www.rajeshkumar.com"
+  };
 
   useEffect(() => {
     loadVoterDetails();
@@ -50,21 +63,43 @@ const FullVoterDetails = () => {
     }
   };
 
+  const generateWhatsAppMessage = () => {
+    const baseMessage = `🗳️ *Voter Information* 🗳️\n\n` +
+      `👤 *Name:* ${voter.name}\n` +
+      `🆔 *Voter ID:* ${voter.voterId}\n` +
+      `🏛️ *Booth:* ${voter.boothNumber}\n` +
+      `📍 *Address:* ${voter.pollingStationAddress}\n` +
+      `${voter.age ? `🎂 *Age:* ${voter.age}\n` : ''}` +
+      `${voter.gender ? `⚧️ *Gender:* ${voter.gender}\n` : ''}` +
+      `\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `*Your Local Candidate* 👇\n\n` +
+      `🎯 *Candidate:* ${politicalInfo.candidateName}\n` +
+      `🏛️ *Party:* ${politicalInfo.partyName}\n` +
+      `🌺 *Symbol:* ${politicalInfo.partySymbol}\n` +
+      `📢 *Slogan:* ${politicalInfo.slogan}\n` +
+      `📞 *Contact:* ${politicalInfo.contact}\n` +
+      `🌐 *Website:* ${politicalInfo.website}\n\n` +
+      `*Remember to vote on election day!* ✅\n` +
+      `*Your vote matters!* 💪`;
+
+    return baseMessage;
+  };
+
   const shareOnWhatsApp = () => {
-    const message = `🗳️ *Voter Details*\n\n👤 *Name:* ${voter.name}\n🆔 *Voter ID:* ${voter.voterId}\n🏛️ *Booth:* ${voter.boothNumber}\n📍 *Address:* ${voter.pollingStationAddress}${voter.age ? `\n🎂 *Age:* ${voter.age}` : ''}${voter.gender ? `\n⚧️ *Gender:* ${voter.gender}` : ''}`;
+    const message = generateWhatsAppMessage();
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
   const shareViaSMS = () => {
-    const message = `Voter Details:\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth: ${voter.boothNumber}\nAddress: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}`;
+    const message = `Voter Details:\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth: ${voter.boothNumber}\nAddress: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}\n\nCandidate: ${politicalInfo.candidateName}\nParty: ${politicalInfo.partyName}`;
     const url = `sms:?body=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
   const shareViaEmail = () => {
     const subject = `Voter Details - ${voter.name}`;
-    const body = `Voter Details:\n\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth Number: ${voter.boothNumber}\nPolling Station Address: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}${voter.serialNumber ? `\nSerial Number: ${voter.serialNumber}` : ''}`;
+    const body = `Voter Details:\n\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth Number: ${voter.boothNumber}\nPolling Station Address: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}${voter.serialNumber ? `\nSerial Number: ${voter.serialNumber}` : ''}\n\nCandidate Information:\nName: ${politicalInfo.candidateName}\nParty: ${politicalInfo.partyName}\nSymbol: ${politicalInfo.partySymbol}\nContact: ${politicalInfo.contact}`;
     const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(url, '_blank');
   };
@@ -76,7 +111,8 @@ const FullVoterDetails = () => {
       const canvas = await html2canvas(element, {
         scale: 2,
         backgroundColor: '#ffffff',
-        useCORS: true
+        useCORS: true,
+        logging: false
       });
       const image = canvas.toDataURL('image/png', 1.0);
       
@@ -98,7 +134,8 @@ const FullVoterDetails = () => {
       const canvas = await html2canvas(element, {
         scale: 2,
         backgroundColor: '#ffffff',
-        useCORS: true
+        useCORS: true,
+        logging: false
       });
       const imgData = canvas.toDataURL('image/png');
       
@@ -115,79 +152,33 @@ const FullVoterDetails = () => {
     }
   };
 
-  const printVoterDetails = async () => {
-    try {
-      const element = document.getElementById('voter-details-card');
-      if (!element) return;
-
-      // Create a new window for printing
-      const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-      if (!printWindow) {
-        alert('Popup blocked - please allow popups to print');
-        return;
-      }
-
-      // Basic styles for print view - include simple layout to ensure readable output
-      const styles = `
-        <style>
-          body { font-family: Arial, Helvetica, sans-serif; margin: 20px; color: #111827; }
-          .card { border-radius: 12px; padding: 16px; border: 1px solid #e5e7eb; }
-          h1 { font-size: 20px; margin-bottom: 8px; }
-          .row { display:flex; justify-content:space-between; margin-bottom:8px; }
-          .label { font-weight:600; color:#374151; width:40%; }
-          .value { color:#111827; width:58%; }
-        </style>
-      `;
-
-      // Build printable HTML by cloning key fields to avoid relying on Tailwind in new window
-      const html = `
-        <html>
-          <head>
-            <title>Voter Details - ${voter.name || voter.voterId || ''}</title>
-            ${styles}
-          </head>
-          <body>
-            <div class="card">
-              <h1>Voter Details</h1>
-              <div class="row"><div class="label">Serial Number:</div><div class="value">${voter.serialNumber || ''}</div></div>
-              <div class="row"><div class="label">Full Name:</div><div class="value">${voter.name || ''}</div></div>
-              <div class="row"><div class="label">Voter ID:</div><div class="value">${voter.voterId || ''}</div></div>
-              <div class="row"><div class="label">Booth Number:</div><div class="value">${voter.boothNumber || ''}</div></div>
-              <div class="row"><div class="label">Polling Station:</div><div class="value">${(voter.pollingStationAddress || '').replace(/\n/g, ' ')}</div></div>
-              <div class="row"><div class="label">Age:</div><div class="value">${voter.age || ''}</div></div>
-              <div class="row"><div class="label">Gender:</div><div class="value">${voter.gender || ''}</div></div>
-              <div style="margin-top:16px; font-size:12px; color:#6b7280;">Printed from VoterData Pro — ${new Date().toLocaleString()}</div>
-            </div>
-          </body>
-        </html>
-      `;
-
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-
-      // Give the window a moment to render
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        // Do not automatically close - some platforms (and Bluetooth printers) need dialog interaction
-        // printWindow.close();
-      }, 300);
-    } catch (err) {
-      console.error('Error printing voter details:', err);
-      alert('Failed to print. See console for details.');
-    }
+  const printVoterDetails = () => {
+    const printContent = document.getElementById('voter-details-card').innerHTML;
+    const originalContent = document.body.innerHTML;
+    
+    document.body.innerHTML = `
+      <div style="padding: 20px; font-family: Arial, sans-serif;">
+        ${printContent}
+        <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+          Printed from VoterData Pro - ${new Date().toLocaleDateString()}
+        </div>
+      </div>
+    `;
+    
+    window.print();
+    document.body.innerHTML = originalContent;
+    window.location.reload();
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin"></div>
-            <div className="w-16 h-16 border-4 border-transparent border-t-orange-600 rounded-full absolute top-0 left-0 animate-spin"></div>
+          <div className="relative inline-block">
+            <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin"></div>
+            <div className="w-16 h-16 border-4 border-transparent border-t-blue-600 rounded-full absolute top-0 left-0 animate-spin"></div>
           </div>
-          <div className="text-orange-600 text-lg font-semibold mt-4">
+          <div className="text-blue-600 text-lg font-semibold mt-4">
             <TranslatedText>Loading voter details...</TranslatedText>
           </div>
         </div>
@@ -197,8 +188,8 @@ const FullVoterDetails = () => {
 
   if (!voter) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
-        <div className="text-center bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/40">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="text-center bg-white rounded-2xl p-8 shadow-xl border border-blue-100 max-w-md w-full">
           <div className="text-6xl mb-4">😕</div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">
             <TranslatedText>Voter Not Found</TranslatedText>
@@ -208,7 +199,7 @@ const FullVoterDetails = () => {
           </p>
           <button
             onClick={() => navigate('/')}
-            className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-2xl font-semibold hover:shadow-xl transition-all duration-300"
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             <TranslatedText>Back to Dashboard</TranslatedText>
           </button>
@@ -218,165 +209,230 @@ const FullVoterDetails = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
-        {/* Header with Back Button */}
-        <div className="mb-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-3 bg-white/90 backdrop-blur-xl text-orange-600 hover:text-orange-700 font-semibold px-6 py-4 rounded-2xl shadow-lg border border-white/40 hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            className="flex items-center gap-2 bg-white text-blue-600 hover:text-blue-700 font-semibold px-4 py-3 rounded-xl shadow-lg border border-blue-100 hover:shadow-xl transition-all duration-200"
           >
             <FiArrowLeft className="text-lg" />
-            <TranslatedText>Back to Dashboard</TranslatedText>
+            <TranslatedText>Back</TranslatedText>
           </button>
-        </div>
-
-        {/* Voter Details Card */}
-        <div id="voter-details-card" className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-8 mb-8">
-          {/* Card Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-2xl shadow-lg mb-4">
-              <FiUser className="text-xl" />
-              <h1 className="text-2xl font-bold">
-                <TranslatedText>Voter Details</TranslatedText>
-              </h1>
-            </div>
-            <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-amber-500 rounded-full mx-auto"></div>
+          
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <GiVote className="text-blue-600" />
+              <TranslatedText>Voter Profile</TranslatedText>
+            </h1>
+            <p className="text-gray-600 text-sm">Complete voter information</p>
           </div>
 
-          {/* Voter Information Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="relative">
+            <button
+              onClick={() => setShowShareOptions(!showShareOptions)}
+              className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-4 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-all duration-200"
+            >
+              <FaShareAlt />
+              <TranslatedText>Share</TranslatedText>
+            </button>
+            
+            {showShareOptions && (
+              <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 z-10 min-w-[200px]">
+                <div className="space-y-2">
+                  <button
+                    onClick={shareOnWhatsApp}
+                    className="flex items-center gap-3 w-full text-left p-3 rounded-lg hover:bg-green-50 transition-colors"
+                  >
+                    <FaWhatsapp className="text-green-500 text-xl" />
+                    <span>WhatsApp</span>
+                  </button>
+                  <button
+                    onClick={shareViaSMS}
+                    className="flex items-center gap-3 w-full text-left p-3 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    <FiMessageCircle className="text-blue-500 text-xl" />
+                    <span>Text SMS</span>
+                  </button>
+                  <button
+                    onClick={shareViaEmail}
+                    className="flex items-center gap-3 w-full text-left p-3 rounded-lg hover:bg-purple-50 transition-colors"
+                  >
+                    <FiMail className="text-purple-500 text-xl" />
+                    <span>Email</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Main Voter Card */}
+        <div id="voter-details-card" className="bg-white rounded-2xl shadow-2xl border border-blue-100 overflow-hidden mb-8">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">{voter.name}</h2>
+                <p className="text-blue-100">Voter ID: {voter.voterId}</p>
+              </div>
+              <div className="bg-white/20 p-3 rounded-xl">
+                <GiVote className="text-3xl" />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
             {/* Personal Information */}
-            <div className="space-y-4">
-              <DetailItem 
-                icon={FiHash}
-                label="Serial Number" 
-                value={voter.serialNumber || 'N/A'}
-                color="from-purple-500 to-purple-600"
-              />
-              <DetailItem 
-                icon={FiUser}
-                label="Full Name" 
-                value={voter.name}
-                color="from-orange-500 to-amber-500"
-              />
-              <DetailItem 
-                icon={FiFileText}
-                label="Voter ID" 
-                value={voter.voterId}
-                color="from-blue-500 to-blue-600"
-              />
-              {voter.age && (
-                <DetailItem 
-                  icon={FiCalendar}
-                  label="Age" 
-                  value={voter.age}
-                  color="from-green-500 to-green-600"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                  <FiUser className="text-blue-500" />
+                  Personal Information
+                </h3>
+                
+                <InfoCard
+                  icon={FiHash}
+                  label="Serial Number"
+                  value={voter.serialNumber || 'N/A'}
+                  color="blue"
                 />
-              )}
+                <InfoCard
+                  icon={FiFileText}
+                  label="Voter ID"
+                  value={voter.voterId}
+                  color="green"
+                />
+                {voter.age && (
+                  <InfoCard
+                    icon={FiCalendar}
+                    label="Age"
+                    value={voter.age}
+                    color="purple"
+                  />
+                )}
+                {voter.gender && (
+                  <InfoCard
+                    icon={voter.gender === 'Male' ? MarsIcon : VenusIcon}
+                    label="Gender"
+                    value={voter.gender}
+                    color="pink"
+                  />
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                  <FiMapPin className="text-red-500" />
+                  Location Details
+                </h3>
+                
+                <InfoCard
+                  icon={FiMapPin}
+                  label="Booth Number"
+                  value={voter.boothNumber}
+                  color="red"
+                />
+                <InfoCard
+                  icon={FiMapPin}
+                  label="Polling Station"
+                  value={voter.pollingStationAddress}
+                  color="indigo"
+                  fullWidth
+                />
+              </div>
             </div>
 
-            {/* Location Information */}
-            <div className="space-y-4">
-              <DetailItem 
-                icon={FiMapPin}
-                label="Booth Number" 
-                value={voter.boothNumber}
-                color="from-red-500 to-red-600"
-              />
-              <DetailItem 
-                icon={FiMapPin}
-                label="Polling Station Address" 
-                value={voter.pollingStationAddress}
-                fullWidth
-                color="from-indigo-500 to-indigo-600"
-              />
-              {voter.gender && (
-                <DetailItem 
-                  icon={MarsIcon}
-                  label="Gender" 
-                  value={voter.gender}
-                  color="from-pink-500 to-pink-600"
-                />
-              )}
+            {/* Political Information Flyer */}
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-6 border border-orange-200 mb-6">
+              <h3 className="text-lg font-semibold text-orange-800 mb-4 flex items-center gap-2">
+                <FiStar className="text-orange-600" />
+                Your Local Candidate
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-orange-700 font-medium">Candidate:</span>
+                      <span className="text-orange-900 font-semibold">{politicalInfo.candidateName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700 font-medium">Party:</span>
+                      <span className="text-orange-900 font-semibold">{politicalInfo.partyName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700 font-medium">Symbol:</span>
+                      <span className="text-orange-900 font-semibold">{politicalInfo.partySymbol}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-orange-700 font-medium">Slogan:</span>
+                      <span className="text-orange-900 font-semibold">{politicalInfo.slogan}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-700 font-medium">Contact:</span>
+                      <span className="text-orange-900 font-semibold">{politicalInfo.contact}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Additional Notes Section */}
-          <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-2xl p-6 border border-orange-200">
-            <h3 className="text-lg font-semibold text-orange-800 mb-3 flex items-center gap-2">
-              <FiShare2 />
-              <TranslatedText>Quick Actions</TranslatedText>
-            </h3>
-            <p className="text-sm text-orange-700/80">
-              <TranslatedText>Share this voter's details with your team or download for offline reference.</TranslatedText>
-            </p>
           </div>
         </div>
 
-        {/* Share & Download Options */}
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/40">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">
-            <TranslatedText>Share & Export</TranslatedText>
-          </h2>
-          <p className="text-gray-600 text-center mb-8">
-            <TranslatedText>Choose how you want to share or save this voter's information</TranslatedText>
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Action Buttons */}
+        <div className="bg-white rounded-2xl shadow-xl border border-blue-100 p-6">
+          <h3 className="text-xl font-bold text-gray-800 text-center mb-6">
+            <TranslatedText>Export & Share Options</TranslatedText>
+          </h3>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <ActionButton
               icon={FaWhatsapp}
               label="WhatsApp"
-              color="from-green-500 to-green-600"
+              color="bg-green-500 hover:bg-green-600"
               onClick={shareOnWhatsApp}
-              disabled={downloading}
             />
-            
             <ActionButton
               icon={FiMessageCircle}
-              label="Text SMS"
-              color="from-blue-500 to-blue-600"
+              label="SMS"
+              color="bg-blue-500 hover:bg-blue-600"
               onClick={shareViaSMS}
-              disabled={downloading}
             />
-            
             <ActionButton
               icon={FiMail}
               label="Email"
-              color="from-purple-500 to-purple-600"
+              color="bg-purple-500 hover:bg-purple-600"
               onClick={shareViaEmail}
-              disabled={downloading}
             />
-            
             <ActionButton
               icon={FiImage}
-              label="Download Image"
-              color="from-indigo-500 to-indigo-600"
+              label="Image"
+              color="bg-indigo-500 hover:bg-indigo-600"
               onClick={downloadAsImage}
-              disabled={downloading}
             />
-            
             <ActionButton
               icon={FiPrinter}
               label="Print"
-              color="from-emerald-500 to-emerald-600"
+              color="bg-gray-600 hover:bg-gray-700"
               onClick={printVoterDetails}
-              disabled={downloading}
             />
-            
             <ActionButton
               icon={FaRegFilePdf}
-              label="Download PDF"
-              color="from-red-500 to-red-600"
+              label="PDF"
+              color="bg-red-500 hover:bg-red-600"
               onClick={downloadAsPDF}
-              disabled={downloading}
             />
           </div>
 
           {downloading && (
             <div className="text-center mt-6">
-              <div className="inline-flex items-center gap-3 bg-orange-100 text-orange-700 px-4 py-2 rounded-xl">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+              <div className="inline-flex items-center gap-3 bg-blue-100 text-blue-700 px-4 py-2 rounded-xl">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                 <span className="text-sm font-medium">
                   <TranslatedText>Preparing download...</TranslatedText>
                 </span>
@@ -389,30 +445,41 @@ const FullVoterDetails = () => {
   );
 };
 
-const DetailItem = ({ icon: Icon, label, value, fullWidth = false, color = "from-gray-500 to-gray-600" }) => (
-  <div className={fullWidth ? 'lg:col-span-2' : ''}>
-    <div className="flex items-center gap-3 mb-2">
-      <div className={`p-2 rounded-xl bg-gradient-to-r ${color} text-white shadow-lg`}>
-        <Icon className="text-sm" />
+const InfoCard = ({ icon: Icon, label, value, color = "blue", fullWidth = false }) => {
+  const colorClasses = {
+    blue: 'bg-blue-100 text-blue-600',
+    green: 'bg-green-100 text-green-600',
+    purple: 'bg-purple-100 text-purple-600',
+    red: 'bg-red-100 text-red-600',
+    indigo: 'bg-indigo-100 text-indigo-600',
+    pink: 'bg-pink-100 text-pink-600'
+  };
+
+  return (
+    <div className={`bg-gray-50 rounded-xl p-4 border border-gray-200 ${fullWidth ? 'col-span-2' : ''}`}>
+      <div className="flex items-center gap-3 mb-2">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          <Icon className="text-lg" />
+        </div>
+        <div className="text-sm font-semibold text-gray-700">
+          <TranslatedText>{label}</TranslatedText>
+        </div>
       </div>
-      <div className="text-sm font-semibold text-gray-700">
-        <TranslatedText>{label}</TranslatedText>
+      <div className="text-gray-800 font-medium pl-11">
+        {value}
       </div>
     </div>
-    <div className="text-lg text-gray-800 bg-gray-50/80 px-4 py-4 rounded-2xl border border-gray-200/80 font-medium">
-      {value}
-    </div>
-  </div>
-);
+  );
+};
 
 const ActionButton = ({ icon: Icon, label, color, onClick, disabled }) => (
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`bg-gradient-to-r ${color} text-white py-4 px-4 rounded-2xl font-semibold transition-all duration-300 hover:shadow-xl active:scale-95 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed`}
+    className={`${color} text-white py-3 px-3 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg active:scale-95 flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
   >
-    <Icon className="text-2xl" />
-    <span className="text-sm">
+    <Icon className="text-xl" />
+    <span className="text-xs text-center">
       <TranslatedText>{label}</TranslatedText>
     </span>
   </button>
