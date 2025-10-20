@@ -1,107 +1,295 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import useAutoTranslate from './hooks/useAutoTranslate';
-import Home from './Pages/Home';
 import Dashboard from './Components/Dashboard';
 import FullVoterDetails from './Components/FullVoterDetails';
 import Upload from './Components/Upload';
-import LanguageSelector from './Components/LanguageSelector';
 import './App.css';
+import Home from './Pages/Home';
+import { ChevronDown, Globe, Menu, X, User, LogOut, Settings } from 'lucide-react';
+import TranslatedText from './Components/TranslatedText';
+import BoothManagement from './Components/BoothManagement';
+import FilterPage from './Components/FilterPage';
+
+// Navigation component for better organization
+const Navigation = ({ currentLanguage, languages, changeLanguage, translating, mobileMenuOpen, setMobileMenuOpen }) => {
+  const location = useLocation();
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const navigation = [
+    { name: 'Home', path: '/home', icon: '🏠' },
+    { name: 'Dashboard', path: '/dashboard', icon: '📊' },
+    { name: 'Upload', path: '/upload', icon: '📁' },
+  ];
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <nav className="bg-white border-b border-gray-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-3">
+            <Link 
+              to="/home" 
+              className="flex items-center gap-3 group"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-200 to-orange-600 rounded-full flex items-center justify-center">
+                  <img 
+                    src="/logo.png" 
+                    alt="Logo"
+                    className='rounded-full' 
+                  />
+                </div>
+                {/* <div className="absolute -inset-1 bg-gradient-to-r from-orange-400 to-red-400 rounded-xl opacity-20 group-hover:opacity-30 blur-sm transition-opacity duration-300"></div> */}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-gray-900 group-hover:text-gray-700 transition-colors">
+                  <TranslatedText>Vinod Mapari</TranslatedText>
+                </span>
+                <span className="text-xs text-gray-500 group-hover:text-gray-600 transition-colors">
+                  <TranslatedText>Election Management App</TranslatedText>
+                </span>
+              </div>
+            </Link>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-1">
+            {navigation.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  isActive(item.path)
+                    ? 'bg-orange-50 text-orange-700 border border-orange-200 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+               <TranslatedText>{item.name}</TranslatedText>
+              </Link>
+            ))}
+          </div>
+
+          {/* Right Side Controls */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Language Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setLanguageOpen(!languageOpen)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm"
+              >
+                <Globe className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  {languages.find(lang => lang.code === currentLanguage)?.flag}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${languageOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {languageOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setLanguageOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <div className="p-2">
+                      <div className="text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide">
+                        Select Language
+                      </div>
+                      {languages.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => {
+                            changeLanguage(lang.code);
+                            setLanguageOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                            currentLanguage === lang.code
+                              ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                              : 'hover:bg-gray-50 text-gray-700'
+                          }`}
+                          disabled={translating}
+                        >
+                          <span className="text-lg">{lang.flag}</span>
+                          <span className="font-medium flex-1 text-left">{lang.name}</span>
+                          {currentLanguage === lang.code && (
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* User Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm"
+              >
+                <div className="w-8 h-8 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-gray-900"> <TranslatedText>Vinod Mapari</TranslatedText></div>
+                  <div className="text-xs text-gray-500"><TranslatedText>Candidate</TranslatedText></div>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setUserMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <div className="p-2">
+                      <div className="px-3 py-3 border-b border-gray-100">
+                        <div className="text-sm font-semibold text-gray-900"><TranslatedText>Vinod Mapari</TranslatedText></div>
+                        <div className="text-xs text-gray-500"><TranslatedText>vinod.mapari@campaign.com</TranslatedText></div>
+                      </div>
+                      
+                      <button className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors">
+                        <Settings className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700"><TranslatedText>Settings</TranslatedText></span>
+                      </button>
+                      
+                      <button className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors">
+                        <LogOut className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700"><TranslatedText>Sign Out</TranslatedText></span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile menu button */}
+          <div className="md:hidden flex items-center gap-2">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-lg border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5 text-gray-600" />
+              ) : (
+                <Menu className="w-5 h-5 text-gray-600" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile menu panel */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-gray-200 bg-white shadow-lg">
+          <div className="px-4 py-4 space-y-1">
+            {navigation.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all duration-200 ${
+                  isActive(item.path)
+                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                <TranslatedText>{item.name}</TranslatedText>
+              </Link>
+            ))}
+            
+            {/* Mobile Language Selector */}
+            <div className="pt-4 mt-4 border-t border-gray-200">
+              <div className="text-sm font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">
+                <TranslatedText>Language</TranslatedText>
+              </div>
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    changeLanguage(lang.code);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                    currentLanguage === lang.code
+                      ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <span className="text-lg">{lang.flag}</span>
+                  <span className="font-medium"><TranslatedText>{lang.name}</TranslatedText></span>
+                  {currentLanguage === lang.code && (
+                    <div className="ml-auto w-2 h-2 bg-orange-500 rounded-full"></div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Mobile User Info */}
+            <div className="pt-4 mt-4 border-t border-gray-200">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-900"><TranslatedText>Vinod Mapari</TranslatedText></div>
+                  <div className="text-xs text-gray-500"><TranslatedText>Candidate</TranslatedText></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </nav>
+  );
+};
 
 function App() {
+  const [currentView, setCurrentView] = useState('upload');
   const [uploadComplete, setUploadComplete] = useState(false);
-  const [showLanguageModal, setShowLanguageModal] = useState(true);
-  const { currentLanguage, changeLanguage, translating } = useAutoTranslate();
-
-  useEffect(() => {
-    // Check if user has already selected language
-    const savedLanguage = localStorage.getItem('selectedLanguage');
-    if (savedLanguage) {
-      setShowLanguageModal(false);
-      changeLanguage(savedLanguage);
-    }
-  }, [changeLanguage]);
-
-  const handleLanguageSelect = (languageCode) => {
-    changeLanguage(languageCode);
-    localStorage.setItem('selectedLanguage', languageCode);
-    setShowLanguageModal(false);
-  };
+  const { currentLanguage, languages, changeLanguage, translating } = useAutoTranslate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleUploadComplete = (totalVoters) => {
     setUploadComplete(true);
-  };
-
-  // Simple translation function
-  const t = (text) => {
-    if (currentLanguage === 'en') return text;
-    return text; // Actual translation handled by HOC
+    setCurrentView('dashboard');
   };
 
   return (
     <Router>
-      <div className="App bg-gradient-to-br from-amber-100 via-orange-50 to-yellow-100">
-        {/* Language Selection Modal */}
-        {showLanguageModal && (
-          <LanguageSelector onLanguageSelect={handleLanguageSelect} />
-        )}
+      <div className="App min-h-screen bg-gray-50">
+        <Navigation 
+          currentLanguage={currentLanguage}
+          languages={languages}
+          changeLanguage={changeLanguage}
+          translating={translating}
+          mobileMenuOpen={mobileMenuOpen}
+          setMobileMenuOpen={setMobileMenuOpen}
+        />
 
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-orange-100 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              {/* Logo and App Name */}
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-l from bg-green-300 to-orange-400">
-                 <img src="/logo.png" alt="" className='rounded-full'/>
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Vinod <span className='text-orange-500'>Mapari</span></h1>
-                  <p className="text-xs text-orange-600 font-medium">Prabhag 20</p>
-                </div>
-              </div>
-
-              {/* Language Selector */}
-              <div className="flex items-center space-x-4">
-                {translating && (
-                  <div className="flex items-center space-x-2 text-orange-600">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                    <span className="text-sm font-medium">Translating...</span>
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowLanguageModal(true)}
-                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-orange-50 transition-colors duration-200 group"
-                  title="Change Language"
-                >
-                  <svg className="w-5 h-5 text-gray-600 group-hover:text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-orange-600 hidden sm:block">
-                    {currentLanguage === 'en' ? 'English' : 
-                     currentLanguage === 'hi' ? 'Hindi' : 
-                     currentLanguage === 'mr' ? 'Marathi' : 'Language'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Main Content */}
-        <main className="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="flex-1">
           <Routes>
-            <Route path="/" element={<Home />} />
             <Route 
               path="/upload" 
               element={<Upload onUploadComplete={handleUploadComplete} />} 
             />
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/search" element={<Dashboard />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/booth-management" element={<BoothManagement />} />
+            <Route path="/filters" element={<FilterPage />} />
             <Route path="/voter/:voterId" element={<FullVoterDetails />} />
-            <Route 
-              path="/home" 
-              element={<Navigate to="/" replace />} 
-            />
+            <Route path="/" element={<Navigate to="/home" replace />} />
           </Routes>
         </main>
       </div>

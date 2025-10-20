@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { db, ref, get } from '../Firebase/config';
+import { db, ref, get, update } from '../Firebase/config';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-
-// Icons
 import {
   FiArrowLeft,
   FiShare2,
@@ -19,46 +17,131 @@ import {
   FiMapPin,
   FiHash,
   FiCalendar,
+  FiEdit2,
+  FiSave,
+  FiX,
 } from 'react-icons/fi';
 import { FaWhatsapp, FaRegFilePdf } from 'react-icons/fa';
 import TranslatedText from './TranslatedText';
-import { MarsIcon } from 'lucide-react';
 
 const FullVoterDetails = () => {
   const { voterId } = useParams();
   const navigate = useNavigate();
   const [voter, setVoter] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [contactNumbers, setContactNumbers] = useState({
+    whatsapp: '',
+    phone: '',
+  });
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [showSMSModal, setShowSMSModal] = useState(false);
+  const [tempWhatsApp, setTempWhatsApp] = useState('');
+  const [tempPhone, setTempPhone] = useState('');
 
   useEffect(() => {
     loadVoterDetails();
   }, [voterId]);
 
   const loadVoterDetails = async () => {
+    setLoading(true);
     try {
       const voterRef = ref(db, `voters/${voterId}`);
       const snapshot = await get(voterRef);
       
       if (snapshot.exists()) {
-        setVoter({ id: voterId, ...snapshot.val() });
+        const voterData = { id: voterId, ...snapshot.val() };
+        setVoter(voterData);
+        setContactNumbers({
+          whatsapp: voterData.whatsappNumber || '',
+          phone: voterData.phoneNumber || '',
+        });
       }
-      setLoading(false);
     } catch (error) {
       console.error('Error loading voter details:', error);
+    } finally {
       setLoading(false);
     }
   };
 
-  const shareOnWhatsApp = () => {
+  const saveContactNumbers = async () => {
+    try {
+      const voterRef = ref(db, `voters/${voterId}`);
+      await update(voterRef, {
+        whatsappNumber: contactNumbers.whatsapp,
+        phoneNumber: contactNumbers.phone,
+      });
+      setVoter({ ...voter, whatsappNumber: contactNumbers.whatsapp, phoneNumber: contactNumbers.phone });
+      setEditMode(false);
+      alert('Contact numbers saved successfully!');
+    } catch (error) {
+      console.error('Error saving contact numbers:', error);
+      alert('Failed to save contact numbers. Please try again.');
+    }
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!contactNumbers.whatsapp) {
+      setShowWhatsAppModal(true);
+      setTempWhatsApp('');
+    } else {
+      sendWhatsAppMessage(contactNumbers.whatsapp);
+    }
+  };
+
+  const handleSMSShare = () => {
+    if (!contactNumbers.phone) {
+      setShowSMSModal(true);
+      setTempPhone('');
+    } else {
+      sendSMSMessage(contactNumbers.phone);
+    }
+  };
+
+  const confirmWhatsAppNumber = async () => {
+    if (tempWhatsApp && tempWhatsApp.length >= 10) {
+      try {
+        const voterRef = ref(db, `voters/${voterId}`);
+        await update(voterRef, { whatsappNumber: tempWhatsApp });
+        setContactNumbers({ ...contactNumbers, whatsapp: tempWhatsApp });
+        setShowWhatsAppModal(false);
+        sendWhatsAppMessage(tempWhatsApp);
+      } catch (error) {
+        console.error('Error saving WhatsApp number:', error);
+        alert('Failed to save WhatsApp number.');
+      }
+    } else {
+      alert('Please enter a valid WhatsApp number (at least 10 digits)');
+    }
+  };
+
+  const confirmPhoneNumber = async () => {
+    if (tempPhone && tempPhone.length >= 10) {
+      try {
+        const voterRef = ref(db, `voters/${voterId}`);
+        await update(voterRef, { phoneNumber: tempPhone });
+        setContactNumbers({ ...contactNumbers, phone: tempPhone });
+        setShowSMSModal(false);
+        sendSMSMessage(tempPhone);
+      } catch (error) {
+        console.error('Error saving phone number:', error);
+        alert('Failed to save phone number.');
+      }
+    } else {
+      alert('Please enter a valid phone number (at least 10 digits)');
+    }
+  };
+
+  const sendWhatsAppMessage = (number) => {
     const message = `🗳️ *Voter Details*\n\n👤 *Name:* ${voter.name}\n🆔 *Voter ID:* ${voter.voterId}\n🏛️ *Booth:* ${voter.boothNumber}\n📍 *Address:* ${voter.pollingStationAddress}${voter.age ? `\n🎂 *Age:* ${voter.age}` : ''}${voter.gender ? `\n⚧️ *Gender:* ${voter.gender}` : ''}`;
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
-  const shareViaSMS = () => {
+  const sendSMSMessage = (number) => {
     const message = `Voter Details:\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth: ${voter.boothNumber}\nAddress: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}`;
-    const url = `sms:?body=${encodeURIComponent(message)}`;
+    const url = `sms:${number}?body=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -120,43 +203,122 @@ const FullVoterDetails = () => {
       const element = document.getElementById('voter-details-card');
       if (!element) return;
 
-      // Create a new window for printing
       const printWindow = window.open('', '_blank', 'noopener,noreferrer');
       if (!printWindow) {
         alert('Popup blocked - please allow popups to print');
         return;
       }
 
-      // Basic styles for print view - include simple layout to ensure readable output
       const styles = `
         <style>
-          body { font-family: Arial, Helvetica, sans-serif; margin: 20px; color: #111827; }
-          .card { border-radius: 12px; padding: 16px; border: 1px solid #e5e7eb; }
-          h1 { font-size: 20px; margin-bottom: 8px; }
-          .row { display:flex; justify-content:space-between; margin-bottom:8px; }
-          .label { font-weight:600; color:#374151; width:40%; }
-          .value { color:#111827; width:58%; }
+          @media print {
+            @page { margin: 0.5cm; }
+          }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
+            padding: 20px; 
+            color: #1f2937;
+            line-height: 1.5;
+          }
+          .container { max-width: 800px; margin: 0 auto; }
+          .header { 
+            text-align: center; 
+            margin-bottom: 24px; 
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f97316;
+          }
+          .header h1 { 
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #1f2937;
+            margin-bottom: 4px;
+          }
+          .header p { 
+            font-size: 13px; 
+            color: #6b7280;
+          }
+          .info-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 16px;
+            margin-bottom: 16px;
+          }
+          .info-item { 
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 3px solid #f97316;
+          }
+          .info-label { 
+            font-size: 11px; 
+            font-weight: 600; 
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+          }
+          .info-value { 
+            font-size: 14px; 
+            font-weight: 500;
+            color: #1f2937;
+          }
+          .footer { 
+            margin-top: 24px; 
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 11px; 
+            color: #9ca3af;
+            text-align: center;
+          }
         </style>
       `;
 
-      // Build printable HTML by cloning key fields to avoid relying on Tailwind in new window
       const html = `
         <html>
           <head>
-            <title>Voter Details - ${voter.name || voter.voterId || ''}</title>
+            <title>Voter Details - ${voter.name || voter.voterId}</title>
             ${styles}
           </head>
           <body>
-            <div class="card">
-              <h1>Voter Details</h1>
-              <div class="row"><div class="label">Serial Number:</div><div class="value">${voter.serialNumber || ''}</div></div>
-              <div class="row"><div class="label">Full Name:</div><div class="value">${voter.name || ''}</div></div>
-              <div class="row"><div class="label">Voter ID:</div><div class="value">${voter.voterId || ''}</div></div>
-              <div class="row"><div class="label">Booth Number:</div><div class="value">${voter.boothNumber || ''}</div></div>
-              <div class="row"><div class="label">Polling Station:</div><div class="value">${(voter.pollingStationAddress || '').replace(/\n/g, ' ')}</div></div>
-              <div class="row"><div class="label">Age:</div><div class="value">${voter.age || ''}</div></div>
-              <div class="row"><div class="label">Gender:</div><div class="value">${voter.gender || ''}</div></div>
-              <div style="margin-top:16px; font-size:12px; color:#6b7280;">Printed from VoterData Pro — ${new Date().toLocaleString()}</div>
+            <div class="container">
+              <div class="header">
+                <h1>Voter Details</h1>
+                <p>Official Voter Information Record</p>
+              </div>
+              <div class="info-grid">
+                <div class="info-item">
+                  <div class="info-label">Serial Number</div>
+                  <div class="info-value">${voter.serialNumber || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Voter ID</div>
+                  <div class="info-value">${voter.voterId || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Full Name</div>
+                  <div class="info-value">${voter.name || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Age</div>
+                  <div class="info-value">${voter.age || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Gender</div>
+                  <div class="info-value">${voter.gender || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Booth Number</div>
+                  <div class="info-value">${voter.boothNumber || 'N/A'}</div>
+                </div>
+              </div>
+              <div class="info-item" style="grid-column: 1 / -1;">
+                <div class="info-label">Polling Station Address</div>
+                <div class="info-value">${(voter.pollingStationAddress || 'N/A').replace(/\n/g, ' ')}</div>
+              </div>
+              <div class="footer">
+                Printed on ${new Date().toLocaleString()} | VoterData Pro
+              </div>
             </div>
           </body>
         </html>
@@ -166,30 +328,22 @@ const FullVoterDetails = () => {
       printWindow.document.write(html);
       printWindow.document.close();
 
-      // Give the window a moment to render
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        // Do not automatically close - some platforms (and Bluetooth printers) need dialog interaction
-        // printWindow.close();
       }, 300);
     } catch (err) {
       console.error('Error printing voter details:', err);
-      alert('Failed to print. See console for details.');
+      alert('Failed to print. Please try again.');
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin"></div>
-            <div className="w-16 h-16 border-4 border-transparent border-t-orange-600 rounded-full absolute top-0 left-0 animate-spin"></div>
-          </div>
-          <div className="text-orange-600 text-lg font-semibold mt-4">
-            <TranslatedText>Loading voter details...</TranslatedText>
-          </div>
+          <div className="w-12 h-12 border-3 border-gray-200 border-t-orange-500 rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-sm text-gray-600"><TranslatedText>Loading voter details...</TranslatedText></p>
         </div>
       </div>
     );
@@ -197,18 +351,14 @@ const FullVoterDetails = () => {
 
   if (!voter) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
-        <div className="text-center bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/40">
-          <div className="text-6xl mb-4">😕</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            <TranslatedText>Voter Not Found</TranslatedText>
-          </h2>
-          <p className="text-gray-600 mb-6">
-            <TranslatedText>The requested voter details could not be found.</TranslatedText>
-          </p>
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="text-4xl mb-3">🔍</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2"><TranslatedText>Voter Not Found</TranslatedText></h2>
+          <p className="text-sm text-gray-600 mb-6"><TranslatedText>The requested voter details could not be found.</TranslatedText></p>
           <button
             onClick={() => navigate('/')}
-            className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-2xl font-semibold hover:shadow-xl transition-all duration-300"
+            className="bg-orange-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
           >
             <TranslatedText>Back to Dashboard</TranslatedText>
           </button>
@@ -218,204 +368,278 @@ const FullVoterDetails = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with Back Button */}
-        <div className="mb-6">
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-5xl mx-auto px-4 py-4">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-3 bg-white/90 backdrop-blur-xl text-orange-600 hover:text-orange-700 font-semibold px-6 py-4 rounded-2xl shadow-lg border border-white/40 hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            className="flex items-center gap-2 text-gray-700 hover:text-orange-600 transition-colors text-sm font-medium"
           >
             <FiArrowLeft className="text-lg" />
-            <TranslatedText>Back to Dashboard</TranslatedText>
+            <span><TranslatedText>Back</TranslatedText></span>
           </button>
         </div>
+      </div>
 
-        {/* Voter Details Card */}
-        <div id="voter-details-card" className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-8 mb-8">
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        {/* Main Card */}
+        <div id="voter-details-card" className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {/* Card Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-2xl shadow-lg mb-4">
-              <FiUser className="text-xl" />
-              <h1 className="text-2xl font-bold">
-                <TranslatedText>Voter Details</TranslatedText>
-              </h1>
-            </div>
-            <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-amber-500 rounded-full mx-auto"></div>
-          </div>
-
-          {/* Voter Information Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Personal Information */}
-            <div className="space-y-4">
-              <DetailItem 
-                icon={FiHash}
-                label="Serial Number" 
-                value={voter.serialNumber || 'N/A'}
-                color="from-purple-500 to-purple-600"
-              />
-              <DetailItem 
-                icon={FiUser}
-                label="Full Name" 
-                value={voter.name}
-                color="from-orange-500 to-amber-500"
-              />
-              <DetailItem 
-                icon={FiFileText}
-                label="Voter ID" 
-                value={voter.voterId}
-                color="from-blue-500 to-blue-600"
-              />
-              {voter.age && (
-                <DetailItem 
-                  icon={FiCalendar}
-                  label="Age" 
-                  value={voter.age}
-                  color="from-green-500 to-green-600"
-                />
-              )}
-            </div>
-
-            {/* Location Information */}
-            <div className="space-y-4">
-              <DetailItem 
-                icon={FiMapPin}
-                label="Booth Number" 
-                value={voter.boothNumber}
-                color="from-red-500 to-red-600"
-              />
-              <DetailItem 
-                icon={FiMapPin}
-                label="Polling Station Address" 
-                value={voter.pollingStationAddress}
-                fullWidth
-                color="from-indigo-500 to-indigo-600"
-              />
-              {voter.gender && (
-                <DetailItem 
-                  icon={MarsIcon}
-                  label="Gender" 
-                  value={voter.gender}
-                  color="from-pink-500 to-pink-600"
-                />
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <FiUser className="text-white text-lg" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-white"><TranslatedText>Voter Details</TranslatedText></h1>
+                  <p className="text-xs text-orange-100"><TranslatedText>Comprehensive Information</TranslatedText></p>
+                </div>
+              </div>
+              {!editMode ? (
+                <button
+                  onClick={() => setEditMode(true)}
+                  className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <FiEdit2 className="text-sm" />
+                  <TranslatedText>Edit Contacts</TranslatedText>
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveContactNumbers}
+                    className="flex items-center gap-1.5 bg-white text-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-50 transition-colors"
+                  >
+                    <FiSave className="text-sm" />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditMode(false);
+                      setContactNumbers({
+                        whatsapp: voter.whatsappNumber || '',
+                        phone: voter.phoneNumber || '',
+                      });
+                    }}
+                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <FiX className="text-sm" />
+                    <TranslatedText>Cancel</TranslatedText>
+                  </button>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Additional Notes Section */}
-          <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-2xl p-6 border border-orange-200">
-            <h3 className="text-lg font-semibold text-orange-800 mb-3 flex items-center gap-2">
-              <FiShare2 />
-              <TranslatedText>Quick Actions</TranslatedText>
-            </h3>
-            <p className="text-sm text-orange-700/80">
-              <TranslatedText>Share this voter's details with your team or download for offline reference.</TranslatedText>
-            </p>
+          {/* Card Body */}
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Personal Information */}
+              <InfoField label="Serial Number" value={voter.serialNumber || 'N/A'} icon={FiHash} />
+              <InfoField label="Voter ID" value={voter.voterId} icon={FiFileText} />
+              <InfoField label="Full Name" value={voter.name} icon={FiUser} />
+              <InfoField label="Age" value={voter.age || 'N/A'} icon={FiCalendar} />
+              <InfoField label="Gender" value={voter.gender || 'N/A'} icon={FiUser} />
+              <InfoField label="Booth Number" value={voter.boothNumber} icon={FiMapPin} />
+              
+              {/* Contact Numbers */}
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaWhatsapp className="text-gray-500 text-sm" />
+                  <span className="text-xs font-medium text-gray-600"><TranslatedText>WhatsApp Number</TranslatedText></span>
+                </div>
+                {editMode ? (
+                  <input
+                    type="tel"
+                    value={contactNumbers.whatsapp}
+                    onChange={(e) => setContactNumbers({ ...contactNumbers, whatsapp: e.target.value })}
+                    placeholder="Enter WhatsApp number"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.whatsapp || 'Not provided'}</TranslatedText></p>
+                )}
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <FiPhone className="text-gray-500 text-sm" />
+                  <span className="text-xs font-medium text-gray-600"><TranslatedText>Phone Number</TranslatedText></span>
+                </div>
+                {editMode ? (
+                  <input
+                    type="tel"
+                    value={contactNumbers.phone}
+                    onChange={(e) => setContactNumbers({ ...contactNumbers, phone: e.target.value })}
+                    placeholder="Enter phone number"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.phone || 'Not provided'}</TranslatedText></p>
+                )}
+              </div>
+
+              {/* Address - Full Width */}
+              <div className="md:col-span-2 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <FiMapPin className="text-gray-500 text-sm" />
+                  <span className="text-xs font-medium text-gray-600"><TranslatedText>Polling Station Address</TranslatedText></span>
+                </div>
+                <p className="text-sm font-medium text-gray-900 leading-relaxed"><TranslatedText>{voter.pollingStationAddress}</TranslatedText></p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Share & Download Options */}
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/40">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">
-            <TranslatedText>Share & Export</TranslatedText>
-          </h2>
-          <p className="text-gray-600 text-center mb-8">
-            <TranslatedText>Choose how you want to share or save this voter's information</TranslatedText>
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <ActionButton
+        {/* Action Buttons */}
+        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-4"><TranslatedText>Share & Export Options</TranslatedText></h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <ActionBtn
               icon={FaWhatsapp}
               label="WhatsApp"
-              color="from-green-500 to-green-600"
-              onClick={shareOnWhatsApp}
+              onClick={handleWhatsAppShare}
+              color="bg-green-500 hover:bg-green-600"
               disabled={downloading}
             />
-            
-            <ActionButton
+            <ActionBtn
               icon={FiMessageCircle}
-              label="Text SMS"
-              color="from-blue-500 to-blue-600"
-              onClick={shareViaSMS}
+              label="SMS"
+              onClick={handleSMSShare}
+              color="bg-blue-500 hover:bg-blue-600"
               disabled={downloading}
             />
-            
-            <ActionButton
+            <ActionBtn
               icon={FiMail}
               label="Email"
-              color="from-purple-500 to-purple-600"
               onClick={shareViaEmail}
+              color="bg-purple-500 hover:bg-purple-600"
               disabled={downloading}
             />
-            
-            <ActionButton
-              icon={FiImage}
-              label="Download Image"
-              color="from-indigo-500 to-indigo-600"
-              onClick={downloadAsImage}
-              disabled={downloading}
-            />
-            
-            <ActionButton
+            <ActionBtn
               icon={FiPrinter}
               label="Print"
-              color="from-emerald-500 to-emerald-600"
               onClick={printVoterDetails}
+              color="bg-gray-700 hover:bg-gray-800"
               disabled={downloading}
             />
-            
-            <ActionButton
+            <ActionBtn
+              icon={FiImage}
+              label="Image"
+              onClick={downloadAsImage}
+              color="bg-indigo-500 hover:bg-indigo-600"
+              disabled={downloading}
+            />
+            <ActionBtn
               icon={FaRegFilePdf}
-              label="Download PDF"
-              color="from-red-500 to-red-600"
+              label="PDF"
               onClick={downloadAsPDF}
+              color="bg-red-500 hover:bg-red-600"
               disabled={downloading}
             />
           </div>
-
           {downloading && (
-            <div className="text-center mt-6">
-              <div className="inline-flex items-center gap-3 bg-orange-100 text-orange-700 px-4 py-2 rounded-xl">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                <span className="text-sm font-medium">
-                  <TranslatedText>Preparing download...</TranslatedText>
-                </span>
-              </div>
+            <div className="mt-4 flex items-center justify-center gap-2 text-sm text-orange-600">
+              <div className="w-4 h-4 border-2 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
+              <span><TranslatedText>Preparing download...</TranslatedText></span>
             </div>
           )}
         </div>
       </div>
+
+      {/* WhatsApp Modal */}
+      {showWhatsAppModal && (
+        <Modal
+          title="Enter WhatsApp Number"
+          onClose={() => setShowWhatsAppModal(false)}
+          onConfirm={confirmWhatsAppNumber}
+        >
+          <input
+            type="tel"
+            value={tempWhatsApp}
+            onChange={(e) => setTempWhatsApp(e.target.value)}
+            placeholder="Enter WhatsApp number with country code"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            autoFocus
+          />
+          <p className="text-xs text-gray-500 mt-2"><TranslatedText>Example: 919876543210 (with country code)</TranslatedText></p>
+        </Modal>
+      )}
+
+      {/* SMS Modal */}
+      {showSMSModal && (
+        <Modal
+          title="Enter Phone Number"
+          onClose={() => setShowSMSModal(false)}
+          onConfirm={confirmPhoneNumber}
+        >
+          <input
+            type="tel"
+            value={tempPhone}
+            onChange={(e) => setTempPhone(e.target.value)}
+            placeholder="Enter phone number"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            autoFocus
+          />
+          <p className="text-xs text-gray-500 mt-2"><TranslatedText>Enter the phone number to send SMS</TranslatedText></p>
+        </Modal>
+      )}
     </div>
   );
 };
 
-const DetailItem = ({ icon: Icon, label, value, fullWidth = false, color = "from-gray-500 to-gray-600" }) => (
-  <div className={fullWidth ? 'lg:col-span-2' : ''}>
-    <div className="flex items-center gap-3 mb-2">
-      <div className={`p-2 rounded-xl bg-gradient-to-r ${color} text-white shadow-lg`}>
-        <Icon className="text-sm" />
-      </div>
-      <div className="text-sm font-semibold text-gray-700">
+const InfoField = ({ label, value, icon: Icon }) => (
+  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+    <div className="flex items-center gap-2 mb-2">
+      <Icon className="text-gray-500 text-sm" />
+      <span className="text-xs font-medium text-gray-600">
         <TranslatedText>{label}</TranslatedText>
-      </div>
+      </span>
     </div>
-    <div className="text-lg text-gray-800 bg-gray-50/80 px-4 py-4 rounded-2xl border border-gray-200/80 font-medium">
-      {value}
-    </div>
+    <p className="text-sm font-medium text-gray-900">
+      {typeof value === 'object' ? JSON.stringify(value) : 
+       typeof value === 'string' ? <TranslatedText>{value}</TranslatedText> : value}
+    </p>
   </div>
 );
 
-const ActionButton = ({ icon: Icon, label, color, onClick, disabled }) => (
+const ActionBtn = ({ icon: Icon, label, onClick, color, disabled }) => (
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`bg-gradient-to-r ${color} text-white py-4 px-4 rounded-2xl font-semibold transition-all duration-300 hover:shadow-xl active:scale-95 flex flex-col items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed`}
+    className={`${color} text-white py-3 px-3 rounded-lg font-medium transition-all duration-200 flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm hover:shadow`}
   >
-    <Icon className="text-2xl" />
-    <span className="text-sm">
-      <TranslatedText>{label}</TranslatedText>
+    <Icon className="text-lg" />
+    <span className="text-xs">
+      {typeof label === 'string' ? <TranslatedText>{label}</TranslatedText> : label}
     </span>
   </button>
+);
+
+const Modal = ({ title, children, onClose, onConfirm }) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        {typeof title === 'string' ? <TranslatedText>{title}</TranslatedText> : title}
+      </h3>
+      {children}
+      <div className="flex gap-3 mt-6">
+        <button
+          onClick={onClose}
+          className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+        >
+          <TranslatedText>Cancel</TranslatedText>
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors"
+        >
+          <TranslatedText>Confirm</TranslatedText>
+        </button>
+      </div>
+    </div>
+  </div>
 );
 
 export default FullVoterDetails;

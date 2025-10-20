@@ -3,7 +3,7 @@ import { parseExcelFile } from '../utils/excelParser';
 import { db, ref, set, push } from '../Firebase/config';
 import { UploadIcon } from 'lucide-react';
 import TranslatedText from './TranslatedText';
-import useAutoTranslate from '../hooks/useAutoTranslate';
+import useAutoTranslate from '../hooks/useAutoTranslate.jsx';
 
 const Upload = ({ onUploadComplete }) => {
   const [uploading, setUploading] = useState(false);
