@@ -94,7 +94,7 @@ const VoterCard = ({ voter, index }) => {
 
               {/* Quick Actions */}
               <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                <button
+                {/* <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleContactClick('WhatsApp');
@@ -113,7 +113,7 @@ const VoterCard = ({ voter, index }) => {
                   title="Share via SMS"
                 >
                   <FiMessageCircle className="w-4 h-4" />
-                </button>
+                </button> */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -183,7 +183,7 @@ const ContactModal = ({
   <div className="fixed inset-0 bg-black backdrop-blur-sm flex items-center justify-center z-50">
     <div className="bg-white rounded-2xl w-full  border border-gray-200">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      {/* <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={`p-3 rounded-xl ${selectedMethod === 'WhatsApp' ? 'bg-green-500' :
               selectedMethod === 'SMS' ? 'bg-blue-500' :
@@ -204,7 +204,7 @@ const ContactModal = ({
         >
           <FiEye className="text-gray-500 text-lg" />
         </button>
-      </div>
+      </div> */}
 
       {/* Voter Preview */}
       <div className="bg-gradient-to-br from-orange-50 to-amber-50  mb-6">
@@ -315,13 +315,13 @@ const VoterList = ({ voters }) => {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Voter List
             </h2>
-            <p className="text-gray-600 font-semibold">
+            {/* <p className="text-gray-600 font-semibold">
               Total {voters.length} voters registered
-            </p>
+            </p> */}
           </div>
-          <div className="bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-lg shadow-lg">
+          {/* <div className="bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-lg shadow-lg">
             #{voters.length}
-          </div>
+          </div> */}
         </div>
       </div>
 

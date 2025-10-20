@@ -1,18 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { db, ref, get, update } from '../Firebase/config';
+import { db, ref, get, update, set } from '../Firebase/config';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
   FiArrowLeft,
-  FiShare2,
-  FiDownload,
-  FiFileText,
-  FiPrinter,
-  FiImage,
-  FiMessageCircle,
-  FiMail,
-  FiPhone,
   FiUser,
   FiMapPin,
   FiHash,
@@ -20,8 +12,16 @@ import {
   FiEdit2,
   FiSave,
   FiX,
+  FiPlus,
+  FiSearch,
+  FiHome,
+  FiUsers,
+  FiClipboard,
+  FiPhone,
+  FiPrinter,
+  FiShare2,
 } from 'react-icons/fi';
-import { FaWhatsapp, FaRegFilePdf } from 'react-icons/fa';
+import { FaWhatsapp } from 'react-icons/fa';
 import TranslatedText from './TranslatedText';
 
 const FullVoterDetails = () => {
@@ -31,17 +31,34 @@ const FullVoterDetails = () => {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
   const [contactNumbers, setContactNumbers] = useState({
     whatsapp: '',
     phone: '',
   });
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
-  const [showSMSModal, setShowSMSModal] = useState(false);
   const [tempWhatsApp, setTempWhatsApp] = useState('');
-  const [tempPhone, setTempPhone] = useState('');
+  const [sameBoothVoters, setSameBoothVoters] = useState([]);
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [showFamilyModal, setShowFamilyModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [allVoters, setAllVoters] = useState([]);
+  const [surveyData, setSurveyData] = useState({
+    address: '',
+    mobile: '',
+    familyIncome: '',
+    education: '',
+    occupation: '',
+    caste: '',
+    religion: '',
+    politicalAffiliation: '',
+    issues: '',
+    remarks: ''
+  });
 
   useEffect(() => {
     loadVoterDetails();
+    loadAllVoters();
   }, [voterId]);
 
   const loadVoterDetails = async () => {
@@ -57,11 +74,65 @@ const FullVoterDetails = () => {
           whatsapp: voterData.whatsappNumber || '',
           phone: voterData.phoneNumber || '',
         });
+        
+        // Load family members
+        if (voterData.familyMembers) {
+          const familyPromises = Object.keys(voterData.familyMembers).map(async (memberId) => {
+            const memberRef = ref(db, `voters/${memberId}`);
+            const memberSnapshot = await get(memberRef);
+            return memberSnapshot.exists() ? { id: memberId, ...memberSnapshot.val() } : null;
+          });
+          const members = await Promise.all(familyPromises);
+          setFamilyMembers(members.filter(member => member !== null));
+        }
+
+        // Load same booth voters
+        loadSameBoothVoters(voterData.boothNumber);
+        
+        // Load survey data if exists
+        if (voterData.survey) {
+          setSurveyData(voterData.survey);
+        }
       }
     } catch (error) {
       console.error('Error loading voter details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAllVoters = async () => {
+    try {
+      const votersRef = ref(db, 'voters');
+      const snapshot = await get(votersRef);
+      if (snapshot.exists()) {
+        const votersData = Object.entries(snapshot.val()).map(([id, data]) => ({
+          id,
+          ...data
+        }));
+        setAllVoters(votersData);
+      }
+    } catch (error) {
+      console.error('Error loading all voters:', error);
+    }
+  };
+
+  const loadSameBoothVoters = async (boothNumber) => {
+    try {
+      const votersRef = ref(db, 'voters');
+      const snapshot = await get(votersRef);
+      if (snapshot.exists()) {
+        const votersData = Object.entries(snapshot.val()).map(([id, data]) => ({
+          id,
+          ...data
+        }));
+        const sameBooth = votersData.filter(voter => 
+          voter.boothNumber === boothNumber && voter.id !== voterId
+        );
+        setSameBoothVoters(sameBooth);
+      }
+    } catch (error) {
+      console.error('Error loading same booth voters:', error);
     }
   };
 
@@ -90,15 +161,6 @@ const FullVoterDetails = () => {
     }
   };
 
-  const handleSMSShare = () => {
-    if (!contactNumbers.phone) {
-      setShowSMSModal(true);
-      setTempPhone('');
-    } else {
-      sendSMSMessage(contactNumbers.phone);
-    }
-  };
-
   const confirmWhatsAppNumber = async () => {
     if (tempWhatsApp && tempWhatsApp.length >= 10) {
       try {
@@ -116,85 +178,17 @@ const FullVoterDetails = () => {
     }
   };
 
-  const confirmPhoneNumber = async () => {
-    if (tempPhone && tempPhone.length >= 10) {
-      try {
-        const voterRef = ref(db, `voters/${voterId}`);
-        await update(voterRef, { phoneNumber: tempPhone });
-        setContactNumbers({ ...contactNumbers, phone: tempPhone });
-        setShowSMSModal(false);
-        sendSMSMessage(tempPhone);
-      } catch (error) {
-        console.error('Error saving phone number:', error);
-        alert('Failed to save phone number.');
-      }
-    } else {
-      alert('Please enter a valid phone number (at least 10 digits)');
-    }
-  };
-
   const sendWhatsAppMessage = (number) => {
     const message = `🗳️ *Voter Details*\n\n👤 *Name:* ${voter.name}\n🆔 *Voter ID:* ${voter.voterId}\n🏛️ *Booth:* ${voter.boothNumber}\n📍 *Address:* ${voter.pollingStationAddress}${voter.age ? `\n🎂 *Age:* ${voter.age}` : ''}${voter.gender ? `\n⚧️ *Gender:* ${voter.gender}` : ''}`;
     const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
-  const sendSMSMessage = (number) => {
-    const message = `Voter Details:\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth: ${voter.boothNumber}\nAddress: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}`;
-    const url = `sms:${number}?body=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-  };
-
-  const shareViaEmail = () => {
-    const subject = `Voter Details - ${voter.name}`;
-    const body = `Voter Details:\n\nName: ${voter.name}\nVoter ID: ${voter.voterId}\nBooth Number: ${voter.boothNumber}\nPolling Station Address: ${voter.pollingStationAddress}${voter.age ? `\nAge: ${voter.age}` : ''}${voter.gender ? `\nGender: ${voter.gender}` : ''}${voter.serialNumber ? `\nSerial Number: ${voter.serialNumber}` : ''}`;
-    const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(url, '_blank');
-  };
-
-  const downloadAsImage = async () => {
-    setDownloading(true);
-    try {
-      const element = document.getElementById('voter-details-card');
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
-      });
-      const image = canvas.toDataURL('image/png', 1.0);
-      
-      const link = document.createElement('a');
-      link.download = `voter-${voter.voterId}-${Date.now()}.png`;
-      link.href = image;
-      link.click();
-    } catch (error) {
-      console.error('Error downloading image:', error);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  const downloadAsPDF = async () => {
-    setDownloading(true);
-    try {
-      const element = document.getElementById('voter-details-card');
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true
-      });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`voter-${voter.voterId}-${Date.now()}.pdf`);
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-    } finally {
-      setDownloading(false);
+  const makeCall = () => {
+    if (contactNumbers.phone) {
+      window.open(`tel:${contactNumbers.phone}`, '_blank');
+    } else {
+      alert('No phone number available for this voter.');
     }
   };
 
@@ -338,6 +332,83 @@ const FullVoterDetails = () => {
     }
   };
 
+  const addFamilyMember = async (memberId) => {
+    try {
+      const voterRef = ref(db, `voters/${voterId}`);
+      const currentVoter = await get(voterRef);
+      const currentData = currentVoter.val();
+      
+      const familyMembers = currentData.familyMembers || {};
+      familyMembers[memberId] = true;
+      
+      await update(voterRef, { familyMembers });
+      
+      // Also update the member to include this voter as family
+      const memberRef = ref(db, `voters/${memberId}`);
+      const memberData = await get(memberRef);
+      const memberFamily = memberData.val().familyMembers || {};
+      memberFamily[voterId] = true;
+      await update(memberRef, { familyMembers: memberFamily });
+      
+      loadVoterDetails();
+      setShowFamilyModal(false);
+      alert('Family member added successfully!');
+    } catch (error) {
+      console.error('Error adding family member:', error);
+      alert('Failed to add family member.');
+    }
+  };
+
+  const removeFamilyMember = async (memberId) => {
+    try {
+      const voterRef = ref(db, `voters/${voterId}`);
+      const currentVoter = await get(voterRef);
+      const currentData = currentVoter.val();
+      
+      const familyMembers = currentData.familyMembers || {};
+      delete familyMembers[memberId];
+      
+      await update(voterRef, { familyMembers });
+      
+      // Also remove from the other voter
+      const memberRef = ref(db, `voters/${memberId}`);
+      const memberData = await get(memberRef);
+      const memberFamily = memberData.val().familyMembers || {};
+      delete memberFamily[voterId];
+      await update(memberRef, { familyMembers: memberFamily });
+      
+      loadVoterDetails();
+      alert('Family member removed successfully!');
+    } catch (error) {
+      console.error('Error removing family member:', error);
+      alert('Failed to remove family member.');
+    }
+  };
+
+  const saveSurveyData = async () => {
+    try {
+      const voterRef = ref(db, `voters/${voterId}`);
+      await update(voterRef, { survey: surveyData });
+      alert('Survey data saved successfully!');
+    } catch (error) {
+      console.error('Error saving survey data:', error);
+      alert('Failed to save survey data.');
+    }
+  };
+
+  const handleSurveyChange = (field, value) => {
+    setSurveyData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const filteredVoters = allVoters.filter(voter => 
+    voter.name?.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    voter.id !== voterId &&
+    !familyMembers.some(member => member.id === voter.id)
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -370,182 +441,443 @@ const FullVoterDetails = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-700 hover:text-orange-600 transition-colors text-sm font-medium"
-          >
-            <FiArrowLeft className="text-lg" />
-            <span><TranslatedText>Back</TranslatedText></span>
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-gray-700 hover:text-orange-600 transition-colors text-sm font-medium"
+            >
+              <FiArrowLeft className="text-lg" />
+              {/* <span><TranslatedText>Back</TranslatedText></span> */}
+            </button>
+            
+            {/* Tab Navigation */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              {[
+                { id: 'details', icon: FiUser, label: 'Details' },
+                { id: 'family', icon: FiUsers, label: 'Family' },
+                { id: 'survey', icon: FiClipboard, label: 'Survey' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <tab.icon className="text-sm" />
+                  <span><TranslatedText>{tab.label}</TranslatedText></span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Main Card */}
-        <div id="voter-details-card" className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Card Header */}
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <FiUser className="text-white text-lg" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-semibold text-white"><TranslatedText>Voter Details</TranslatedText></h1>
-                  <p className="text-xs text-orange-100"><TranslatedText>Comprehensive Information</TranslatedText></p>
+        {/* Main Content based on Active Tab */}
+        {activeTab === 'details' && (
+          <>
+            {/* Main Card */}
+            <div id="voter-details-card" className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Card Header */}
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <FiUser className="text-white text-lg" />
+                    </div>
+                    <div>
+                      <h1 className="text-lg font-semibold text-white"><TranslatedText>Voter Details</TranslatedText></h1>
+                      <p className="text-xs text-orange-100"><TranslatedText>Comprehensive Information</TranslatedText></p>
+                    </div>
+                  </div>
+                  {!editMode ? (
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <FiEdit2 className="text-sm" />
+                      <TranslatedText>Edit</TranslatedText>
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveContactNumbers}
+                        className="flex items-center gap-1.5 bg-white text-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-50 transition-colors"
+                      >
+                        <FiSave className="text-sm" />
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditMode(false);
+                          setContactNumbers({
+                            whatsapp: voter.whatsappNumber || '',
+                            phone: voter.phoneNumber || '',
+                          });
+                        }}
+                        className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        <FiX className="text-sm" />
+                        <TranslatedText>Cancel</TranslatedText>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-              {!editMode ? (
-                <button
-                  onClick={() => setEditMode(true)}
-                  className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <FiEdit2 className="text-sm" />
-                  <TranslatedText>Edit Contacts</TranslatedText>
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveContactNumbers}
-                    className="flex items-center gap-1.5 bg-white text-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-50 transition-colors"
-                  >
-                    <FiSave className="text-sm" />
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditMode(false);
-                      setContactNumbers({
-                        whatsapp: voter.whatsappNumber || '',
-                        phone: voter.phoneNumber || '',
-                      });
-                    }}
-                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                  >
-                    <FiX className="text-sm" />
-                    <TranslatedText>Cancel</TranslatedText>
-                  </button>
+
+              {/* Card Body */}
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <InfoField label="Serial Number" value={voter.serialNumber || 'N/A'} icon={FiHash} />
+                  <InfoField label="Voter ID" value={voter.voterId} icon={FiUser} />
+                  <InfoField label="Full Name" value={voter.name} icon={FiUser} />
+                  <InfoField label="Age" value={voter.age || 'N/A'} icon={FiCalendar} />
+                  <InfoField label="Gender" value={voter.gender || 'N/A'} icon={FiUser} />
+                  <InfoField label="Booth Number" value={voter.boothNumber} icon={FiMapPin} />
+                  
+                  {/* Contact Numbers */}
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FaWhatsapp className="text-gray-500 text-sm" />
+                      <span className="text-xs font-medium text-gray-600"><TranslatedText>WhatsApp Number</TranslatedText></span>
+                    </div>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={contactNumbers.whatsapp}
+                        onChange={(e) => setContactNumbers({ ...contactNumbers, whatsapp: e.target.value })}
+                        placeholder="Enter WhatsApp number"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.whatsapp || 'Not provided'}</TranslatedText></p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FiPhone className="text-gray-500 text-sm" />
+                      <span className="text-xs font-medium text-gray-600"><TranslatedText>Phone Number</TranslatedText></span>
+                    </div>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={contactNumbers.phone}
+                        onChange={(e) => setContactNumbers({ ...contactNumbers, phone: e.target.value })}
+                        placeholder="Enter phone number"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.phone || 'Not provided'}</TranslatedText></p>
+                    )}
+                  </div>
+
+                  {/* Address - Full Width */}
+                  <div className="md:col-span-2 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FiMapPin className="text-gray-500 text-sm" />
+                      <span className="text-xs font-medium text-gray-600"><TranslatedText>Polling Station Address</TranslatedText></span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 leading-relaxed"><TranslatedText>{voter.pollingStationAddress}</TranslatedText></p>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4"><TranslatedText>Quick Actions</TranslatedText></h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <ActionBtn
+                  icon={FaWhatsapp}
+                  label="WhatsApp"
+                  onClick={handleWhatsAppShare}
+                  color="bg-green-500 hover:bg-green-600"
+                />
+                <ActionBtn
+                  icon={FiPhone}
+                  label="Call"
+                  onClick={makeCall}
+                  color="bg-blue-500 hover:bg-blue-600"
+                />
+                <ActionBtn
+                  icon={FiPrinter}
+                  label="Print"
+                  onClick={printVoterDetails}
+                  color="bg-gray-700 hover:bg-gray-800"
+                />
+                <ActionBtn
+                  icon={FiShare2}
+                  label="Share"
+                  onClick={() => navigator.share?.({
+                    title: `Voter Details - ${voter.name}`,
+                    text: `Voter Details: ${voter.name}, Voter ID: ${voter.voterId}, Booth: ${voter.boothNumber}`,
+                    url: window.location.href
+                  })}
+                  color="bg-purple-500 hover:bg-purple-600"
+                />
+              </div>
+            </div>
+
+            {/* Same Booth Voters */}
+            <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">
+                <TranslatedText>Same Booth Voters</TranslatedText> 
+                <span className="text-sm text-gray-500 ml-2">({sameBoothVoters.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {sameBoothVoters.slice(0, 6).map((voter) => (
+                  <div key={voter.id} className="border border-gray-200 rounded-lg p-3 hover:border-orange-300 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-gray-900 text-sm">{voter.name}</h3>
+                        <p className="text-xs text-gray-500">ID: {voter.voterId}</p>
+                      </div>
+                      <button
+                        onClick={() => navigate(`/voter/${voter.id}`)}
+                        className="text-orange-600 hover:text-orange-700 text-xs font-medium"
+                      >
+                        View
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {sameBoothVoters.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4"><TranslatedText>No other voters found in the same booth.</TranslatedText></p>
               )}
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Card Body */}
-          <div className="p-6">
+        {activeTab === 'family' && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900"><TranslatedText>Family Members</TranslatedText></h2>
+              <button
+                onClick={() => setShowFamilyModal(true)}
+                className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
+              >
+                <FiPlus className="text-sm" />
+                <TranslatedText>Add Family Member</TranslatedText>
+              </button>
+            </div>
+
+            {/* Family Members List */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Personal Information */}
-              <InfoField label="Serial Number" value={voter.serialNumber || 'N/A'} icon={FiHash} />
-              <InfoField label="Voter ID" value={voter.voterId} icon={FiFileText} />
-              <InfoField label="Full Name" value={voter.name} icon={FiUser} />
-              <InfoField label="Age" value={voter.age || 'N/A'} icon={FiCalendar} />
-              <InfoField label="Gender" value={voter.gender || 'N/A'} icon={FiUser} />
-              <InfoField label="Booth Number" value={voter.boothNumber} icon={FiMapPin} />
-              
-              {/* Contact Numbers */}
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FaWhatsapp className="text-gray-500 text-sm" />
-                  <span className="text-xs font-medium text-gray-600"><TranslatedText>WhatsApp Number</TranslatedText></span>
+              {familyMembers.map((member) => (
+                <div key={member.id} className="border border-gray-200 rounded-lg p-4 hover:border-orange-300 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">{member.name}</h3>
+                      <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-600">
+                        <div><span className="font-medium">Voter ID:</span> {member.voterId}</div>
+                        <div><span className="font-medium">Age:</span> {member.age || 'N/A'}</div>
+                        <div><span className="font-medium">Gender:</span> {member.gender || 'N/A'}</div>
+                        <div><span className="font-medium">Booth:</span> {member.boothNumber}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 ml-4">
+                      <button
+                        onClick={() => navigate(`/voter/${member.id}`)}
+                        className="text-orange-600 hover:text-orange-700 text-xs font-medium"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => removeFamilyMember(member.id)}
+                        className="text-red-600 hover:text-red-700 text-xs font-medium"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {editMode ? (
-                  <input
-                    type="tel"
-                    value={contactNumbers.whatsapp}
-                    onChange={(e) => setContactNumbers({ ...contactNumbers, whatsapp: e.target.value })}
-                    placeholder="Enter WhatsApp number"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                  />
-                ) : (
-                  <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.whatsapp || 'Not provided'}</TranslatedText></p>
-                )}
+              ))}
+            </div>
+
+            {familyMembers.length === 0 && (
+              <div className="text-center py-8">
+                <FiUsers className="text-4xl text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500"><TranslatedText>No family members added yet.</TranslatedText></p>
+                <p className="text-sm text-gray-400 mt-1"><TranslatedText>Click "Add Family Member" to get started.</TranslatedText></p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'survey' && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-6"><TranslatedText>Family Survey Form</TranslatedText></h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Complete Address</TranslatedText>
+                </label>
+                <textarea
+                  value={surveyData.address}
+                  onChange={(e) => handleSurveyChange('address', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Enter complete residential address"
+                />
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiPhone className="text-gray-500 text-sm" />
-                  <span className="text-xs font-medium text-gray-600"><TranslatedText>Phone Number</TranslatedText></span>
-                </div>
-                {editMode ? (
-                  <input
-                    type="tel"
-                    value={contactNumbers.phone}
-                    onChange={(e) => setContactNumbers({ ...contactNumbers, phone: e.target.value })}
-                    placeholder="Enter phone number"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                  />
-                ) : (
-                  <p className="text-sm font-medium text-gray-900"> <TranslatedText>{contactNumbers.phone || 'Not provided'}</TranslatedText></p>
-                )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Mobile Number</TranslatedText>
+                </label>
+                <input
+                  type="tel"
+                  value={surveyData.mobile}
+                  onChange={(e) => handleSurveyChange('mobile', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Enter mobile number"
+                />
               </div>
 
-              {/* Address - Full Width */}
-              <div className="md:col-span-2 bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiMapPin className="text-gray-500 text-sm" />
-                  <span className="text-xs font-medium text-gray-600"><TranslatedText>Polling Station Address</TranslatedText></span>
-                </div>
-                <p className="text-sm font-medium text-gray-900 leading-relaxed"><TranslatedText>{voter.pollingStationAddress}</TranslatedText></p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Family Income</TranslatedText>
+                </label>
+                <select
+                  value={surveyData.familyIncome}
+                  onChange={(e) => handleSurveyChange('familyIncome', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                >
+                  <option value=""><TranslatedText>Select Income Range</TranslatedText></option>
+                  <option value="below-3L"><TranslatedText>Below 3 Lakhs</TranslatedText></option>
+                  <option value="3L-5L"><TranslatedText>3-5 Lakhs</TranslatedText></option>
+                  <option value="5L-10L"><TranslatedText>5-10 Lakhs</TranslatedText></option>
+                  <option value="above-10L"><TranslatedText>Above 10 Lakhs</TranslatedText></option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Education</TranslatedText>
+                </label>
+                <input
+                  type="text"
+                  value={surveyData.education}
+                  onChange={(e) => handleSurveyChange('education', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Highest education"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Occupation</TranslatedText>
+                </label>
+                <input
+                  type="text"
+                  value={surveyData.occupation}
+                  onChange={(e) => handleSurveyChange('occupation', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Occupation"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Caste</TranslatedText>
+                </label>
+                <input
+                  type="text"
+                  value={surveyData.caste}
+                  onChange={(e) => handleSurveyChange('caste', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Caste"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Religion</TranslatedText>
+                </label>
+                <input
+                  type="text"
+                  value={surveyData.religion}
+                  onChange={(e) => handleSurveyChange('religion', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Religion"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Political Affiliation</TranslatedText>
+                </label>
+                <input
+                  type="text"
+                  value={surveyData.politicalAffiliation}
+                  onChange={(e) => handleSurveyChange('politicalAffiliation', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Political party affiliation"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Key Issues & Concerns</TranslatedText>
+                </label>
+                <textarea
+                  value={surveyData.issues}
+                  onChange={(e) => handleSurveyChange('issues', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="What are the key issues and concerns for this family?"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <TranslatedText>Remarks</TranslatedText>
+                </label>
+                <textarea
+                  value={surveyData.remarks}
+                  onChange={(e) => handleSurveyChange('remarks', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Any additional remarks"
+                />
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4"><TranslatedText>Share & Export Options</TranslatedText></h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <ActionBtn
-              icon={FaWhatsapp}
-              label="WhatsApp"
-              onClick={handleWhatsAppShare}
-              color="bg-green-500 hover:bg-green-600"
-              disabled={downloading}
-            />
-            <ActionBtn
-              icon={FiMessageCircle}
-              label="SMS"
-              onClick={handleSMSShare}
-              color="bg-blue-500 hover:bg-blue-600"
-              disabled={downloading}
-            />
-            <ActionBtn
-              icon={FiMail}
-              label="Email"
-              onClick={shareViaEmail}
-              color="bg-purple-500 hover:bg-purple-600"
-              disabled={downloading}
-            />
-            <ActionBtn
-              icon={FiPrinter}
-              label="Print"
-              onClick={printVoterDetails}
-              color="bg-gray-700 hover:bg-gray-800"
-              disabled={downloading}
-            />
-            <ActionBtn
-              icon={FiImage}
-              label="Image"
-              onClick={downloadAsImage}
-              color="bg-indigo-500 hover:bg-indigo-600"
-              disabled={downloading}
-            />
-            <ActionBtn
-              icon={FaRegFilePdf}
-              label="PDF"
-              onClick={downloadAsPDF}
-              color="bg-red-500 hover:bg-red-600"
-              disabled={downloading}
-            />
-          </div>
-          {downloading && (
-            <div className="mt-4 flex items-center justify-center gap-2 text-sm text-orange-600">
-              <div className="w-4 h-4 border-2 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-              <span><TranslatedText>Preparing download...</TranslatedText></span>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={saveSurveyData}
+                className="bg-orange-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-orange-600 transition-colors"
+              >
+                <TranslatedText>Save Survey Data</TranslatedText>
+              </button>
+              <button
+                onClick={() => setSurveyData({
+                  address: '',
+                  mobile: '',
+                  familyIncome: '',
+                  education: '',
+                  occupation: '',
+                  caste: '',
+                  religion: '',
+                  politicalAffiliation: '',
+                  issues: '',
+                  remarks: ''
+                })}
+                className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                <TranslatedText>Clear Form</TranslatedText>
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* WhatsApp Modal */}
@@ -567,23 +899,66 @@ const FullVoterDetails = () => {
         </Modal>
       )}
 
-      {/* SMS Modal */}
-      {showSMSModal && (
-        <Modal
-          title="Enter Phone Number"
-          onClose={() => setShowSMSModal(false)}
-          onConfirm={confirmPhoneNumber}
-        >
-          <input
-            type="tel"
-            value={tempPhone}
-            onChange={(e) => setTempPhone(e.target.value)}
-            placeholder="Enter phone number"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            autoFocus
-          />
-          <p className="text-xs text-gray-500 mt-2"><TranslatedText>Enter the phone number to send SMS</TranslatedText></p>
-        </Modal>
+      {/* Family Modal */}
+      {showFamilyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                <TranslatedText>Add Family Member</TranslatedText>
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                <TranslatedText>Search and select voters to add as family members</TranslatedText>
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="relative mb-4">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search voters by name..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                />
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                {filteredVoters.map((voter) => (
+                  <div key={voter.id} className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-gray-50">
+                    <div>
+                      <h4 className="font-medium text-gray-900">{voter.name}</h4>
+                      <p className="text-sm text-gray-500">ID: {voter.voterId} | Booth: {voter.boothNumber}</p>
+                    </div>
+                    <button
+                      onClick={() => addFamilyMember(voter.id)}
+                      className="flex items-center gap-1 bg-orange-500 text-white px-3 py-1 rounded text-sm hover:bg-orange-600 transition-colors"
+                    >
+                      <FiPlus className="text-xs" />
+                      <TranslatedText>Add</TranslatedText>
+                    </button>
+                  </div>
+                ))}
+                
+                {filteredVoters.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <TranslatedText>No voters found matching your search.</TranslatedText>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowFamilyModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                <TranslatedText>Close</TranslatedText>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

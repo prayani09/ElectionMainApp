@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import debounce from 'lodash.debounce';
-import { db, ref, get } from '../Firebase/config';
+import { db, ref, get, onValue } from '../Firebase/config';
 import * as XLSX from 'xlsx';
 import useAutoTranslate from '../hooks/useAutoTranslate';
 
@@ -33,9 +33,10 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    boothNumber: '',
+    boothNumbers: [], // allow multi-select of booths
     pollingStationAddress: ''
   });
+  const [boothsList, setBoothsList] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPassword, setExportPassword] = useState('');
@@ -89,11 +90,10 @@ const Dashboard = () => {
           });
         }
 
-        // Apply booth filter
-        if (filter.boothNumber) {
-          filteredVoters = filteredVoters.filter(voter => 
-            voter.boothNumber && voter.boothNumber.toString().includes(filter.boothNumber)
-          );
+        // Apply booth filter (supports multiple boothNumbers)
+        if (filter.boothNumbers && Array.isArray(filter.boothNumbers) && filter.boothNumbers.length > 0) {
+          const selected = filter.boothNumbers.map(b => String(b));
+          filteredVoters = filteredVoters.filter(voter => voter.boothNumber && selected.includes(String(voter.boothNumber)));
         }
 
         // Apply polling station filter
@@ -131,6 +131,33 @@ const Dashboard = () => {
     return () => handler.cancel();
   }, [searchTerm, filters, loadVoters]);
 
+  // Build booths list from voters in realtime
+  useEffect(() => {
+    const boothsRef = ref(db, 'voters');
+    const unsubscribe = onValue ? onValue(boothsRef, (snapshot) => {
+      const map = new Map();
+      if (snapshot.exists()) {
+        snapshot.forEach(child => {
+          const v = child.val();
+          const b = v.boothNumber ? String(v.boothNumber) : null;
+          if (!b) return;
+          if (!map.has(b)) {
+            map.set(b, { number: b, name: v.pollingStationAddress || `Booth ${b}`, count: 1 });
+          } else {
+            map.get(b).count++;
+          }
+        });
+      }
+      const list = Array.from(map.values()).sort((a, b) => a.number.localeCompare(b.number));
+      setBoothsList(list);
+    }) : null;
+
+    return () => {
+      // remove Firebase listener if available
+      try { if (unsubscribe && typeof unsubscribe === 'function') unsubscribe(); } catch (e) {}
+    };
+  }, []);
+
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
     setFilters(prev => ({
@@ -142,7 +169,7 @@ const Dashboard = () => {
   // Clear all filters
   const clearFilters = () => {
     setFilters({
-      boothNumber: '',
+      boothNumbers: [],
       pollingStationAddress: ''
     });
     setSearchTerm('');
@@ -211,6 +238,20 @@ const Dashboard = () => {
             const searchText = `${voter.name} ${voter.voterId}`.toLowerCase();
             return terms.every(term => searchText.includes(term));
           });
+        }
+
+        // Apply boothNumbers filter (multi-select)
+        if (filters.boothNumbers && Array.isArray(filters.boothNumbers) && filters.boothNumbers.length > 0) {
+          const selected = filters.boothNumbers.map(b => String(b));
+          filteredVoters = filteredVoters.filter(voter => voter.boothNumber && selected.includes(String(voter.boothNumber)));
+        }
+
+        // Apply polling station filter
+        if (filters.pollingStationAddress) {
+          filteredVoters = filteredVoters.filter(voter =>
+            voter.pollingStationAddress && 
+            voter.pollingStationAddress.toLowerCase().includes(filters.pollingStationAddress.toLowerCase())
+          );
         }
 
         // Translate headers and data if not English
@@ -340,6 +381,80 @@ const Dashboard = () => {
                 <span className="hidden sm:inline"><TranslatedText>Filters</TranslatedText></span>
               </button>
 
+              {/* Filters dropdown/panel */}
+              {showFilters && (
+                <div className="absolute right-0 mt-12 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2"><TranslatedText>Booths</TranslatedText></h4>
+                  <p className="text-xs text-gray-500 mb-3">Select one or more booths to filter voters</p>
+
+                  <div className="max-h-48 overflow-auto mb-3">
+                    {boothsList.length === 0 ? (
+                      <p className="text-xs text-gray-400">No booths found</p>
+                    ) : (
+                      boothsList.map(booth => (
+                        <label key={booth.number} className="flex items-center gap-2 mb-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="form-checkbox h-4 w-4 text-orange-600"
+                            checked={filters.boothNumbers.includes(booth.number)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFilters(prev => {
+                                const next = { ...prev };
+                                const setNums = new Set(next.boothNumbers || []);
+                                if (checked) setNums.add(booth.number);
+                                else setNums.delete(booth.number);
+                                next.boothNumbers = Array.from(setNums);
+                                return next;
+                              });
+                            }}
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800">Booth {booth.number}</div>
+                            <div className="text-xs text-gray-500">{booth.name} • {booth.count} voters</div>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          // select all
+                          setFilters(prev => ({ ...prev, boothNumbers: boothsList.map(b => b.number) }));
+                        }}
+                        className="text-xs px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200"
+                      >
+                        <TranslatedText>Select all</TranslatedText>
+                      </button>
+                      <button
+                        onClick={() => {
+                          // clear selection
+                          setFilters(prev => ({ ...prev, boothNumbers: [] }));
+                        }}
+                        className="text-xs px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200"
+                      >
+                        <TranslatedText>Clear</TranslatedText>
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          // apply (reload voters)
+                          loadVoters(1, searchTerm, filters);
+                          setShowFilters(false);
+                        }}
+                        className="text-xs px-3 py-1 rounded-md bg-orange-500 text-white"
+                      >
+                        <TranslatedText>Apply</TranslatedText>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Export Button */}
               <button
                 onClick={handleExport}
@@ -354,47 +469,10 @@ const Dashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className={`max-w-7xl mx-auto px-4 ${isSticky ? 'pt-28' : 'pt-6'} pb-6`}>
+      <div className={`px-4 ${isSticky ? 'pt-28' : 'pt-6'} pb-6`}>
         
-
-        {/* Pagination Controls - Top */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">
-              <TranslatedText>Showing</TranslatedText> {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, totalCount)} <TranslatedText>of</TranslatedText> {totalCount.toLocaleString()}
-            </span>
-            <select 
-              value={itemsPerPage}
-              onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-            >
-              <option value={50}>50 per page</option>
-              <option value={100}>100 per page</option>
-              <option value={200}>200 per page</option>
-            </select>
-          </div>
-          
-          <div className="flex gap-1">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="p-2 rounded-lg bg-white border border-gray-300 hover:border-orange-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-sm"
-            >
-              <FiChevronLeft className="text-lg" />
-            </button>
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-lg bg-white border border-gray-300 hover:border-orange-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-sm"
-            >
-              <FiChevronRight className="text-lg" />
-            </button>
-          </div>
-        </div>
-
         {/* Voter List */}
         {(activeTab === 'voters' || activeTab === 'overview') && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <Suspense fallback={
               <div className="flex justify-center items-center py-12">
                 {/* <FiLoader className="animate-spin text-orange-500 text-xl mr-2" /> */}
@@ -403,7 +481,6 @@ const Dashboard = () => {
             }>
               <VoterList voters={voters} />
             </Suspense>
-          </div>
         )}
 
         {/* Pagination Controls - Bottom */}
