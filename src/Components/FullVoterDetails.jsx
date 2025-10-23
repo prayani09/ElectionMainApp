@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { db, ref, get, update, set } from '../Firebase/config';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import TranslatedText from './TranslatedText';
 import {
   FiArrowLeft,
   FiUser,
@@ -22,7 +23,6 @@ import {
   FiShare2,
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
-import TranslatedText from './TranslatedText';
 
 const FullVoterDetails = () => {
   const { voterId } = useParams();
@@ -442,7 +442,7 @@ const FullVoterDetails = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4">
+        <div className="max-w-5xl mx-auto px-4 py-0">
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}
@@ -510,7 +510,7 @@ const FullVoterDetails = () => {
                         className="flex items-center gap-1.5 bg-white text-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-50 transition-colors"
                       >
                         <FiSave className="text-sm" />
-                        Save
+                       <TranslatedText>Save</TranslatedText>
                       </button>
                       <button
                         onClick={() => {
@@ -532,6 +532,53 @@ const FullVoterDetails = () => {
 
               {/* Card Body */}
               <div className="p-6">
+                {/* Voter Status & Support Level */}
+                <div className="mb-6 flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-200">
+                  <div className="flex items-center gap-4">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={voter.hasVoted || false}
+                        onChange={(e) => {
+                          const voterRef = ref(db, `voters/${voterId}`);
+                          update(voterRef, { hasVoted: e.target.checked });
+                          setVoter(prev => ({ ...prev, hasVoted: e.target.checked }));
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                      <span className="ml-3 text-sm font-medium text-gray-700">
+                        <TranslatedText>{voter.hasVoted ? 'Voted' : 'Not Voted'}</TranslatedText>
+                      </span>
+                    </label>
+
+                    <div className="border-l border-gray-300 pl-2">
+                      <select
+                        value={voter.supportStatus || 'unknown'}
+                        onChange={(e) => {
+                          const voterRef = ref(db, `voters/${voterId}`);
+                          update(voterRef, { supportStatus: e.target.value });
+                          setVoter(prev => ({ ...prev, supportStatus: e.target.value }));
+                        }}
+                        className={`text-sm font-medium rounded-lg px-3 py-2 ${
+                          voter.supportStatus === 'supporter' 
+                            ? 'bg-green-500 text-white'
+                            : voter.supportStatus === 'medium'
+                            ? 'bg-yellow-500 text-white'
+                            : voter.supportStatus === 'not-supporter'
+                            ? 'bg-red-500 text-white'
+                            : 'bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <option value="unknown"><TranslatedText>Select</TranslatedText></option>
+                        <option value="supporter" className="bg-white text-gray-700"><TranslatedText>Strong</TranslatedText></option>
+                        <option value="medium" className="bg-white text-gray-700"><TranslatedText>Medium</TranslatedText></option>
+                        <option value="not-supporter" className="bg-white text-gray-700"><TranslatedText>Not</TranslatedText></option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoField label="Serial Number" value={voter.serialNumber || 'N/A'} icon={FiHash} />
                   <InfoField label="Voter ID" value={voter.voterId} icon={FiUser} />

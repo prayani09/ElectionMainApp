@@ -9,10 +9,16 @@ import {
   FiLoader,
   FiDownload,
   FiRefreshCw,
-  FiSliders,
   FiHome,
   FiMapPin,
-  FiHash
+  FiHash,
+  FiUser,
+  FiPhone,
+  FiCheckCircle,
+  FiCircle,
+  FiChevronRight,
+  FiArrowLeft,
+  FiList
 } from 'react-icons/fi';
 import TranslatedText from './TranslatedText';
 
@@ -21,91 +27,114 @@ const FilterPage = () => {
   const [filteredVoters, setFilteredVoters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [cachedVoters, setCachedVoters] = useState(null);
-  const [lastFetchTime, setLastFetchTime] = useState(0);
+  const [currentView, setCurrentView] = useState('filters'); // 'filters' or 'results'
+  const [selectedFilter, setSelectedFilter] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportError, setExportError] = useState('');
 
   const [filters, setFilters] = useState({
+    searchTerm: '',
     boothNumber: '',
+    pollingStation: '',
     village: '',
-    pollingStationAddress: '',
-    sortBy: 'serial',
-    searchTerm: ''
+    hasPhone: '',
+    supportStatus: '',
+    hasVoted: '',
+    sortBy: 'name'
   });
 
-  const [selectedFilter, setSelectedFilter] = useState(null);
-
-  // Filter options cards data
-  const filterOptions = [
+  // Simple filter categories for the main view
+  const filterCategories = [
+    {
+      id: 'all',
+      title: 'All Voters',
+      description: 'View complete voter database',
+      icon: FiUsers,
+      color: 'blue'
+    },
     {
       id: 'booth',
-      title: 'Filter by Booth',
-      description: 'Select a booth number to view voters',
+      title: 'Booth Wise',
+      description: 'View voters by booth numbers',
       icon: FiHash,
-      key: 'boothNumber'
+      color: 'green'
+    },
+    {
+      id: 'polling',
+      title: 'Polling Station',
+      description: 'Filter by polling station addresses',
+      icon: FiMapPin,
+      color: 'purple'
+    },
+    {
+      id: 'alphabetical',
+      title: 'Alphabetical',
+      description: 'View voters in alphabetical order',
+      icon: FiUser,
+      color: 'orange'
+    },
+    {
+      id: 'phone',
+      title: 'With Phone Numbers',
+      description: 'Voters who have phone numbers',
+      icon: FiPhone,
+      color: 'teal'
+    },
+    {
+      id: 'voted',
+      title: 'Voting Status',
+      description: 'Filter by voted/not voted',
+      icon: FiCheckCircle,
+      color: 'indigo'
+    },
+    {
+      id: 'support',
+      title: 'Support Status',
+      description: 'Filter by supporter levels',
+      icon: FiUsers,
+      color: 'pink'
     },
     {
       id: 'village',
-      title: 'Filter by Village',
-      description: 'Select a village to view voters',
+      title: 'Village Wise',
+      description: 'View voters by village',
       icon: FiHome,
-      key: 'village'
-    },
-    {
-      id: 'pollingStation',
-      title: 'Filter by Polling Station',
-      description: 'Select a polling station address',
-      icon: FiMapPin,
-      key: 'pollingStationAddress'
+      color: 'red'
     }
   ];
 
-  // Optimized voter data processing
+  // Process voter data
   const processVoterData = useCallback((rawData) => {
     if (!rawData) return [];
     
     return Object.entries(rawData).map(([key, value]) => ({
       id: key,
-      serial: value.serial || key,
-      name: value.name || value.Name || value.fullName || value.FullName || 'Unknown Voter',
-      voterId: value.voterId || value.VoterId || value.voterID || '',
-      boothNumber: value.boothNumber || value.booth || '',
-      pollingStationAddress: value.pollingStationAddress || value.pollingStation || value.address || '',
-      village: value.village || value.Village || value.area || '',
-      fatherName: value.fatherName || value.FatherName || '',
-      age: value.age || value.Age || '',
-      gender: value.gender || value.Gender || '',
-      phone: value.phone || value.Phone || value.mobile || '',
-      address: value.address || value.Address || value.residence || ''
+      serial: value.serialNumber || key,
+      name: value.name || 'Unknown Voter',
+      voterId: value.voterId || value.id || key,
+      boothNumber: value.boothNumber || '',
+      pollingStation: value.pollingStation || value.pollingStationAddress || '',
+      village: value.village || value.area || '',
+      fatherName: value.fatherName || '',
+      age: value.age || '',
+      gender: value.gender || '',
+      phone: value.phone || value.phoneNumber || '',
+      address: value.address || '',
+      houseNumber: value.houseNumber || '',
+      hasVoted: value.hasVoted || false,
+      supportStatus: value.supportStatus || 'unknown',
+      dob: value.dob || '',
+      familyMembers: value.familyMembers || []
     }));
   }, []);
 
-  // Cache management
-  const getCachedData = useCallback(() => {
-    const now = Date.now();
-    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-    
-    if (cachedVoters && (now - lastFetchTime) < CACHE_DURATION) {
-      return cachedVoters;
-    }
-    return null;
-  }, [cachedVoters, lastFetchTime]);
-
-  // Load voters with caching
+  // Load voters from Firebase
   const loadVoters = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       if (forceRefresh) {
         setRefreshing(true);
-      }
-
-      // Check cache first
-      const cachedData = forceRefresh ? null : getCachedData();
-      
-      if (cachedData) {
-        setVoters(cachedData);
-        setLoading(false);
-        setRefreshing(false);
-        return;
       }
 
       const votersRef = ref(db, 'voters');
@@ -114,10 +143,6 @@ const FilterPage = () => {
         if (snapshot.exists()) {
           const rawData = snapshot.val();
           const processedVoters = processVoterData(rawData);
-          
-          // Cache the data
-          setCachedVoters(processedVoters);
-          setLastFetchTime(Date.now());
           setVoters(processedVoters);
         } else {
           setVoters([]);
@@ -131,20 +156,19 @@ const FilterPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getCachedData, processVoterData]);
+  }, [processVoterData]);
 
   // Initial load
   useEffect(() => {
     loadVoters();
 
-    // Cleanup function
     return () => {
       const votersRef = ref(db, 'voters');
       off(votersRef);
     };
   }, [loadVoters]);
 
-  // Apply filters with debouncing
+  // Apply filters based on selected filter type
   const applyFilters = useCallback(() => {
     if (!voters.length) {
       setFilteredVoters([]);
@@ -157,30 +181,49 @@ const FilterPage = () => {
     if (filters.searchTerm.trim()) {
       const terms = filters.searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
       filtered = filtered.filter(voter => {
-        const searchText = `${voter.name} ${voter.voterId} ${voter.fatherName} ${voter.village}`.toLowerCase();
+        const searchText = `${voter.name} ${voter.voterId} ${voter.fatherName} ${voter.village} ${voter.houseNumber}`.toLowerCase();
         return terms.every(term => searchText.includes(term));
       });
     }
 
-    // Apply booth filter
-    if (filters.boothNumber) {
+    // Apply specific filters based on selected filter type
+    if (selectedFilter === 'booth' && filters.boothNumber) {
       filtered = filtered.filter(voter => 
         voter.boothNumber && voter.boothNumber.toString().includes(filters.boothNumber)
       );
     }
 
-    // Apply village filter
-    if (filters.village) {
+    if (selectedFilter === 'polling' && filters.pollingStation) {
       filtered = filtered.filter(voter => 
-        voter.village && voter.village.toLowerCase().includes(filters.village.toLowerCase())
+        voter.pollingStation && voter.pollingStation.toLowerCase().includes(filters.pollingStation.toLowerCase())
       );
     }
 
-    // Apply polling station address filter
-    if (filters.pollingStationAddress) {
-      filtered = filtered.filter(voter =>
-        voter.pollingStationAddress && 
-        voter.pollingStationAddress.toLowerCase().includes(filters.pollingStationAddress.toLowerCase())
+    if (selectedFilter === 'phone') {
+      if (filters.hasPhone === 'yes') {
+        filtered = filtered.filter(voter => voter.phone && voter.phone.trim() !== '');
+      } else if (filters.hasPhone === 'no') {
+        filtered = filtered.filter(voter => !voter.phone || voter.phone.trim() === '');
+      }
+    }
+
+    if (selectedFilter === 'voted') {
+      if (filters.hasVoted === 'voted') {
+        filtered = filtered.filter(voter => voter.hasVoted === true);
+      } else if (filters.hasVoted === 'notVoted') {
+        filtered = filtered.filter(voter => voter.hasVoted === false);
+      }
+    }
+
+    if (selectedFilter === 'support' && filters.supportStatus) {
+      filtered = filtered.filter(voter => 
+        voter.supportStatus && voter.supportStatus.toLowerCase() === filters.supportStatus.toLowerCase()
+      );
+    }
+
+    if (selectedFilter === 'village' && filters.village) {
+      filtered = filtered.filter(voter => 
+        voter.village && voter.village.toLowerCase().includes(filters.village.toLowerCase())
       );
     }
 
@@ -191,20 +234,16 @@ const FilterPage = () => {
           return (a.name || '').localeCompare(b.name || '');
         case 'booth':
           return (a.boothNumber || '').localeCompare(b.boothNumber || '');
+        case 'village':
+          return (a.village || '').localeCompare(b.village || '');
         case 'serial':
         default:
           return (a.serial || '').localeCompare(b.serial || '');
       }
     });
 
-    // Add sequential serial numbers
-    const filteredWithSequentialSerial = filtered.map((voter, index) => ({
-      ...voter,
-      sequentialSerial: index + 1
-    }));
-
-    setFilteredVoters(filteredWithSequentialSerial);
-  }, [voters, filters]);
+    setFilteredVoters(filtered);
+  }, [voters, filters, selectedFilter]);
 
   // Debounced filter application
   const debouncedApplyFilters = useMemo(
@@ -220,48 +259,65 @@ const FilterPage = () => {
   // Get unique values for dropdowns
   const uniqueValues = useMemo(() => {
     const booths = [...new Set(voters.map(v => v.boothNumber).filter(Boolean))].sort();
+    const pollingStations = [...new Set(voters.map(v => v.pollingStation).filter(Boolean))].sort();
     const villages = [...new Set(voters.map(v => v.village).filter(Boolean))].sort();
-    const addresses = [...new Set(voters.map(v => v.pollingStationAddress).filter(Boolean))].sort();
     
-    return { booths, villages, addresses };
+    return { booths, pollingStations, villages };
   }, [voters]);
+
+  const handleFilterSelect = useCallback((filterId) => {
+    setSelectedFilter(filterId);
+    setCurrentView('results');
+    
+    // Set default filters based on selection
+    const newFilters = {
+      searchTerm: '',
+      boothNumber: '',
+      pollingStation: '',
+      village: '',
+      hasPhone: '',
+      supportStatus: '',
+      hasVoted: '',
+      sortBy: filterId === 'alphabetical' ? 'name' : 
+              filterId === 'booth' ? 'booth' : 'name'
+    };
+    
+    setFilters(newFilters);
+  }, []);
+
+  const handleBackToFilters = useCallback(() => {
+    setCurrentView('filters');
+    setSelectedFilter(null);
+    setFilters({
+      searchTerm: '',
+      boothNumber: '',
+      pollingStation: '',
+      village: '',
+      hasPhone: '',
+      supportStatus: '',
+      hasVoted: '',
+      sortBy: 'name'
+    });
+  }, []);
 
   const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({
       ...prev,
       [key]: value
     }));
-    
-    // Set selected filter for card display
-    if (value) {
-      const filterOption = filterOptions.find(option => option.key === key);
-      if (filterOption) {
-        setSelectedFilter({
-          type: filterOption.id,
-          value: value,
-          label: key === 'boothNumber' ? `Booth ${value}` : 
-                 key === 'village' ? value : 
-                 value.length > 20 ? value.substring(0, 20) + '...' : value
-        });
-      }
-    } else {
-      // If value is empty, check if we should clear the selected filter
-      const filterOption = filterOptions.find(option => option.key === key);
-      if (filterOption && selectedFilter?.type === filterOption.id) {
-        setSelectedFilter(null);
-      }
-    }
-  }, [selectedFilter, filterOptions]);
+  }, []);
 
   const clearFilters = useCallback(() => {
     setFilters({
+      searchTerm: '',
       boothNumber: '',
+      pollingStation: '',
       village: '',
-      pollingStationAddress: '',
-      sortBy: 'serial',
-      searchTerm: ''
+      hasPhone: '',
+      supportStatus: '',
+      hasVoted: '',
+      sortBy: 'name'
     });
-    setSelectedFilter(null);
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -269,35 +325,64 @@ const FilterPage = () => {
     loadVoters(true);
   }, [loadVoters]);
 
-  const handleFilterCardClick = useCallback((filterType) => {
-    // This will highlight the selected card
-    const filterOption = filterOptions.find(option => option.id === filterType);
-    if (filterOption && filters[filterOption.key]) {
-      setSelectedFilter({
-        type: filterType,
-        value: filters[filterOption.key],
-        label: filterOption.key === 'boothNumber' ? `Booth ${filters[filterOption.key]}` : 
-               filterOption.key === 'village' ? filters[filterOption.key] : 
-               filters[filterOption.key].length > 20 ? filters[filterOption.key].substring(0, 20) + '...' : filters[filterOption.key]
-      });
-    }
-  }, [filters, filterOptions]);
+  const handleExport = useCallback(() => {
+    setShowExportModal(true);
+  }, []);
 
-  // Enhanced loading state matching Dashboard
+  const handleExportConfirm = useCallback(() => {
+    if (exportPassword === 'admin123') {
+      // Export logic here
+      console.log('Exporting data...', filteredVoters);
+      setShowExportModal(false);
+      setExportPassword('');
+      setExportError('');
+      alert(`Exporting ${filteredVoters.length} voters to Excel`);
+    } else {
+      setExportError('Invalid password');
+    }
+  }, [exportPassword, filteredVoters]);
+
+  const handleVoterClick = useCallback((voterId) => {
+    window.location.href = `/voter/${voterId}`;
+  }, []);
+
+  // Color mapping for filter cards
+  const colorClasses = {
+    blue: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100',
+    green: 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100',
+    purple: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100',
+    orange: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100',
+    teal: 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100',
+    indigo: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
+    pink: 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100',
+    red: 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+  };
+
+  const iconColorClasses = {
+    blue: 'text-blue-600',
+    green: 'text-green-600',
+    purple: 'text-purple-600',
+    orange: 'text-orange-600',
+    teal: 'text-teal-600',
+    indigo: 'text-indigo-600',
+    pink: 'text-pink-600',
+    red: 'text-red-600'
+  };
+
+  // Loading state
   if (loading && voters.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="relative mb-6">
-            <div className="w-24 h-24 border-4 border-orange-200 rounded-full animate-spin"></div>
-            <div className="w-24 h-24 border-4 border-transparent border-t-orange-600 rounded-full absolute top-0 left-0 animate-spin"></div>
-            <FiUsers className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-orange-600 text-2xl animate-pulse" />
+            <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin"></div>
+            <div className="w-16 h-16 border-4 border-transparent border-t-blue-600 rounded-full absolute top-0 left-0 animate-spin"></div>
           </div>
-          <h2 className="text-2xl font-bold text-orange-800 mb-2">
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">
             <TranslatedText>Loading Voter Data</TranslatedText>
           </h2>
-          <p className="text-orange-600 text-lg">
-            <TranslatedText>Please wait while we prepare your filters...</TranslatedText>
+          <p className="text-gray-600">
+            <TranslatedText>Please wait while we load the database...</TranslatedText>
           </p>
         </div>
       </div>
@@ -305,331 +390,428 @@ const FilterPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50">
-      {/* Enhanced Sticky Header */}
-      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-orange-100/60 p-4 shadow-sm">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-orange-800">
-                <TranslatedText>Advanced Voter Filters</TranslatedText>
-              </h1>
-              <p className="text-orange-600">
-                <TranslatedText>Filter and search through voter database</TranslatedText>
-              </p>
-            </div>
-            
-            {/* Refresh Button */}
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="min-h-[52px] min-w-[52px] p-3 bg-white border border-gray-300/80 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 flex items-center justify-center"
-              aria-label="Refresh data"
-            >
-              <FiRefreshCw className={`text-lg text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          {/* Enhanced Search Bar */}
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex-1 relative">
-              <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg" />
-              <input
-                type="text"
-                placeholder="Search by name, voter ID, father's name, or village..."
-                value={filters.searchTerm}
-                onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
-                className="w-full pl-12 pr-12 py-3 rounded-2xl border border-gray-300/80 focus:border-orange-500 focus:ring-4 focus:ring-orange-100/50 transition-all duration-300 bg-white/90 backdrop-blur-sm text-base placeholder-gray-500 shadow-inner"
-                aria-label="Search voters"
-              />
-              {filters.searchTerm && (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center">
+              {currentView === 'results' && (
                 <button
-                  onClick={() => handleFilterChange('searchTerm', '')}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={handleBackToFilters}
+                  className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <FiX className="text-lg" />
+                  <FiArrowLeft className="text-gray-600 text-lg" />
                 </button>
               )}
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span className="font-medium">
-              {filteredVoters.length.toLocaleString()} <TranslatedText>voters found</TranslatedText>
-              {voters.length > 0 && (
-                <span className="text-gray-500 ml-2">
-                  (from {voters.length.toLocaleString()} total)
-                </span>
-              )}
-            </span>
-            {refreshing && (
-              <div className="flex items-center gap-2 text-orange-600">
-                <FiLoader className="animate-spin" />
-                <span><TranslatedText>Updating...</TranslatedText></span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 max-w-7xl mx-auto">
-        {/* Filter Cards Section */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <FiFilter className="text-orange-600" />
-            <TranslatedText>Filter Options</TranslatedText>
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {filterOptions.map((option) => {
-              const IconComponent = option.icon;
-              const isSelected = selectedFilter?.type === option.id;
-              
-              return (
-                <div
-                  key={option.id}
-                  onClick={() => handleFilterCardClick(option.id)}
-                  className={`bg-white/95 backdrop-blur-xl rounded-2xl p-6 shadow-lg border-2 cursor-pointer transition-all duration-300 hover:shadow-xl ${
-                    isSelected 
-                      ? 'border-orange-500 bg-orange-50' 
-                      : 'border-white/50 hover:border-orange-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                      <IconComponent className="text-orange-600 text-xl" />
-                    </div>
-                    {isSelected && (
-                      <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                    )}
-                  </div>
-                  
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    <TranslatedText>{option.title}</TranslatedText>
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    <TranslatedText>{option.description}</TranslatedText>
-                  </p>
-                  
-                  <select
-                    value={filters[option.key]}
-                    onChange={(e) => handleFilterChange(option.key, e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className={`w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-300 ${
-                      isSelected
-                        ? 'border-orange-300 focus:ring-orange-200 focus:border-orange-500'
-                        : 'border-gray-300 focus:ring-orange-100 focus:border-orange-400'
-                    }`}
-                  >
-                    <option value="">
-                      <TranslatedText>All {option.title.replace('Filter by ', '')}s</TranslatedText>
-                    </option>
-                    {uniqueValues[option.key === 'boothNumber' ? 'booths' : 
-                                 option.key === 'village' ? 'villages' : 'addresses'].map((value) => (
-                      <option key={value} value={value}>
-                        {option.key === 'pollingStationAddress' && value.length > 30 
-                          ? value.substring(0, 30) + '...' 
-                          : value}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  {isSelected && (
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-sm text-orange-600 font-medium">
-                        <TranslatedText>Selected:</TranslatedText> {selectedFilter.label}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleFilterChange(option.key, '');
-                        }}
-                        className="text-orange-500 hover:text-orange-700 transition-colors"
-                      >
-                        <FiX className="w-4 h-4" />
-                      </button>
-                    </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  <TranslatedText>Voter Management System</TranslatedText>
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  {currentView === 'filters' ? (
+                    <TranslatedText>Choose a filter to view voters</TranslatedText>
+                  ) : (
+                    <TranslatedText>Viewing filtered results</TranslatedText>
                   )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Sort Option */}
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-white/50 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                <FiSliders className="text-orange-600" />
-                <TranslatedText>Sort Results</TranslatedText>
-              </h3>
-              <button
-                onClick={clearFilters}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-2"
-              >
-                <FiX className="text-sm" />
-                <TranslatedText>Clear All</TranslatedText>
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-700">
-                <TranslatedText>Sort By:</TranslatedText>
-              </label>
-              <select
-                value={filters.sortBy}
-                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-500 transition-all duration-300"
-              >
-                <option value="serial"><TranslatedText>Serial Number</TranslatedText></option>
-                <option value="name"><TranslatedText>Alphabetically (Name)</TranslatedText></option>
-                <option value="booth"><TranslatedText>Booth Number</TranslatedText></option>
-              </select>
-            </div>
-          </div>
-
-          {/* Active Filter Display */}
-          {selectedFilter && (
-            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-orange-800 mb-1">
-                    <TranslatedText>Currently Filtering By:</TranslatedText>
-                  </h3>
-                  <p className="text-orange-700 font-semibold">
-                    {selectedFilter.type === 'booth' && <TranslatedText>Booth Number</TranslatedText>}
-                    {selectedFilter.type === 'village' && <TranslatedText>Village</TranslatedText>}
-                    {selectedFilter.type === 'pollingStation' && <TranslatedText>Polling Station</TranslatedText>}
-                    : {selectedFilter.label}
-                  </p>
-                </div>
-                <button
-                  onClick={clearFilters}
-                  className="px-4 py-2 text-sm font-medium text-orange-700 bg-orange-100 border border-orange-300 rounded-xl hover:bg-orange-200 transition-colors flex items-center gap-2"
-                >
-                  <FiX className="text-sm" />
-                  <TranslatedText>Clear Filter</TranslatedText>
-                </button>
+                </p>
               </div>
             </div>
-          )}
-        </div>
+            
+            <div className="flex items-center space-x-3">
+              {currentView === 'results' && (
+                <>
+                  <button
+                    onClick={handleExport}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                  >
+                    <FiDownload className="mr-2" />
+                    <TranslatedText>Export Excel</TranslatedText>
+                  </button>
+                  
+                  <button
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <FiRefreshCw className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                    <TranslatedText>Refresh</TranslatedText>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
 
-        {/* Enhanced Results Section */}
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-50">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h2 className="text-lg font-semibold text-gray-800">
-                <TranslatedText>Filtered Voter List</TranslatedText> 
-                <span className="text-orange-600 ml-2">({filteredVoters.length} <TranslatedText>voters</TranslatedText>)</span>
-              </h2>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-gray-500 bg-white px-3 py-1 rounded-full border">
-                  <TranslatedText>Sorted by:</TranslatedText> {filters.sortBy === 'name' ? 'Alphabetical' : 
-                              filters.sortBy === 'booth' ? 'Booth Number' : 'Serial Number'}
-                </span>
-                {refreshing && (
-                  <div className="flex items-center gap-2 text-orange-600">
-                    <FiLoader className="animate-spin" />
-                    <span><TranslatedText>Refreshing...</TranslatedText></span>
-                  </div>
+          {/* Search Bar - Only show in results view */}
+          {currentView === 'results' && (
+            <div className="pb-4">
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search within results..."
+                  value={filters.searchTerm}
+                  onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                />
+                {filters.searchTerm && (
+                  <button
+                    onClick={() => handleFilterChange('searchTerm', '')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <FiX />
+                  </button>
                 )}
               </div>
             </div>
-          </div>
-
-          {filteredVoters.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FiUsers className="text-3xl text-orange-400" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                <TranslatedText>No voters found</TranslatedText>
-              </h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-6">
-                <TranslatedText>Try adjusting your search or filter criteria to see more results</TranslatedText>
-              </p>
-              <button
-                onClick={clearFilters}
-                className="px-6 py-3 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 transition-colors font-medium"
-              >
-                <TranslatedText>Clear All Filters</TranslatedText>
-              </button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>#</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Voter ID</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Name</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Father's Name</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Age</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Gender</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Booth No.</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Village</TranslatedText>
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <TranslatedText>Polling Station</TranslatedText>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredVoters.map((voter) => (
-                    <tr key={voter.id} className="hover:bg-orange-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {voter.sequentialSerial}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">
-                        {voter.voterId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {voter.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {voter.fatherName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {voter.age}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {voter.gender}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-orange-600">
-                        {voter.boothNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {voter.village}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        <div className="max-w-xs truncate" title={voter.pollingStationAddress}>
-                          {voter.pollingStationAddress}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           )}
         </div>
       </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {currentView === 'filters' ? (
+          /* Filters Grid View */
+          <div>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                <TranslatedText>Choose Your Filter</TranslatedText>
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                <TranslatedText>Select a filter category to view and manage voter data. Each filter provides different ways to organize and analyze the voter database.</TranslatedText>
+              </p>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-blue-600 mb-1">{voters.length}</div>
+                <div className="text-sm text-gray-600"><TranslatedText>Total Voters</TranslatedText></div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-green-600 mb-1">
+                  {voters.filter(v => v.phone && v.phone.trim() !== '').length}
+                </div>
+                <div className="text-sm text-gray-600"><TranslatedText>With Phone</TranslatedText></div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-purple-600 mb-1">
+                  {[...new Set(voters.map(v => v.boothNumber).filter(Boolean))].length}
+                </div>
+                <div className="text-sm text-gray-600"><TranslatedText>Booths</TranslatedText></div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 text-center">
+                <div className="text-2xl font-bold text-orange-600 mb-1">
+                  {voters.filter(v => v.hasVoted).length}
+                </div>
+                <div className="text-sm text-gray-600"><TranslatedText>Voted</TranslatedText></div>
+              </div>
+            </div>
+
+            {/* Filter Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filterCategories.map((category) => {
+                const IconComponent = category.icon;
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => handleFilterSelect(category.id)}
+                    className={`bg-white rounded-xl p-6 shadow-sm border-2 transition-all duration-300 hover:shadow-md hover:scale-105 active:scale-95 ${colorClasses[category.color]}`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-3 rounded-lg ${colorClasses[category.color].split(' ')[0]}`}>
+                        <IconComponent className={`text-xl ${iconColorClasses[category.color]}`} />
+                      </div>
+                      <FiChevronRight className={`text-lg ${iconColorClasses[category.color]}`} />
+                    </div>
+                    
+                    <h3 className="text-lg font-semibold mb-2 text-left">
+                      <TranslatedText>{category.title}</TranslatedText>
+                    </h3>
+                    <p className="text-sm opacity-75 text-left">
+                      <TranslatedText>{category.description}</TranslatedText>
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* Results View */
+          <div className="space-y-6">
+            {/* Results Header */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                    <span className={`p-2 rounded-lg mr-3 ${colorClasses[filterCategories.find(f => f.id === selectedFilter)?.color].split(' ')[0]}`}>
+                      {React.createElement(filterCategories.find(f => f.id === selectedFilter)?.icon, {
+                        className: `text-lg ${iconColorClasses[filterCategories.find(f => f.id === selectedFilter)?.color]}`
+                      })}
+                    </span>
+                    <TranslatedText>{filterCategories.find(f => f.id === selectedFilter)?.title}</TranslatedText>
+                  </h2>
+                  <p className="text-gray-600 mt-2">
+                    <TranslatedText>Showing</TranslatedText> <span className="font-semibold text-blue-600">{filteredVoters.length}</span> <TranslatedText>of</TranslatedText> <span className="font-semibold">{voters.length}</span> <TranslatedText>voters</TranslatedText>
+                  </p>
+                </div>
+                
+                <div className="flex flex-wrap gap-3">
+                  {/* Dynamic Filter Controls */}
+                  {selectedFilter === 'booth' && (
+                    <select
+                      value={filters.boothNumber}
+                      onChange={(e) => handleFilterChange('boothNumber', e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value=""><TranslatedText>All Booths</TranslatedText></option>
+                      {uniqueValues.booths.map((booth) => (
+                        <option key={booth} value={booth}>{booth}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {selectedFilter === 'polling' && (
+                    <select
+                      value={filters.pollingStation}
+                      onChange={(e) => handleFilterChange('pollingStation', e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value=""><TranslatedText>All Polling Stations</TranslatedText></option>
+                      {uniqueValues.pollingStations.map((station) => (
+                        <option key={station} value={station}>
+                          {station.length > 40 ? station.substring(0, 40) + '...' : station}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {selectedFilter === 'phone' && (
+                    <select
+                      value={filters.hasPhone}
+                      onChange={(e) => handleFilterChange('hasPhone', e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value=""><TranslatedText>All Voters</TranslatedText></option>
+                      <option value="yes"><TranslatedText>With Phone Numbers</TranslatedText></option>
+                      <option value="no"><TranslatedText>Without Phone Numbers</TranslatedText></option>
+                    </select>
+                  )}
+
+                  {selectedFilter === 'voted' && (
+                    <select
+                      value={filters.hasVoted}
+                      onChange={(e) => handleFilterChange('hasVoted', e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value=""><TranslatedText>All Voters</TranslatedText></option>
+                      <option value="voted"><TranslatedText>Voted</TranslatedText></option>
+                      <option value="notVoted"><TranslatedText>Not Voted</TranslatedText></option>
+                    </select>
+                  )}
+
+                  {selectedFilter === 'support' && (
+                    <select
+                      value={filters.supportStatus}
+                      onChange={(e) => handleFilterChange('supportStatus', e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value=""><TranslatedText>All Support Levels</TranslatedText></option>
+                      <option value="strong"><TranslatedText>Strong Supporters</TranslatedText></option>
+                      <option value="medium"><TranslatedText>Medium Supporters</TranslatedText></option>
+                      <option value="weak"><TranslatedText>Weak Supporters</TranslatedText></option>
+                      <option value="against"><TranslatedText>Against</TranslatedText></option>
+                    </select>
+                  )}
+
+                  <select
+                    value={filters.sortBy}
+                    onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="name"><TranslatedText>Sort by Name</TranslatedText></option>
+                    <option value="booth"><TranslatedText>Sort by Booth</TranslatedText></option>
+                    <option value="village"><TranslatedText>Sort by Village</TranslatedText></option>
+                    <option value="serial"><TranslatedText>Sort by Serial</TranslatedText></option>
+                  </select>
+
+                  <button
+                    onClick={clearFilters}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <TranslatedText>Clear</TranslatedText>
+                  </button>
+                </div>
+              </div>
+
+              {refreshing && (
+                <div className="flex items-center text-blue-600 mt-4">
+                  <FiLoader className="animate-spin mr-2" />
+                  <TranslatedText>Updating data...</TranslatedText>
+                </div>
+              )}
+            </div>
+
+            {/* Voters Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              {filteredVoters.length === 0 ? (
+                <div className="text-center py-16">
+                  <FiUsers className="mx-auto text-gray-400 text-5xl mb-4" />
+                  <h3 className="text-xl font-medium text-gray-900 mb-2">
+                    <TranslatedText>No voters found</TranslatedText>
+                  </h3>
+                  <p className="text-gray-500 max-w-md mx-auto mb-6">
+                    <TranslatedText>Try adjusting your filters or search criteria to see more results</TranslatedText>
+                  </p>
+                  <button
+                    onClick={clearFilters}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <TranslatedText>Clear All Filters</TranslatedText>
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>#</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Name</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Father's Name</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Phone</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Booth</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Voting Status</TranslatedText>
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <TranslatedText>Support</TranslatedText>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredVoters.map((voter, index) => (
+                        <tr 
+                          key={voter.id} 
+                          className="hover:bg-gray-50 cursor-pointer transition-colors group"
+                          onClick={() => handleVoterClick(voter.id)}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 group-hover:text-blue-600">
+                            {index + 1}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600">{voter.name}</div>
+                            <div className="text-sm text-gray-500">{voter.voterId}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {voter.fatherName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {voter.phone ? (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <FiPhone className="mr-1" />
+                                {voter.phone}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                <TranslatedText>No Phone</TranslatedText>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {voter.boothNumber}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {voter.hasVoted ? (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <FiCheckCircle className="mr-1" />
+                                <TranslatedText>Voted</TranslatedText>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                <FiCircle className="mr-1" />
+                                <TranslatedText>Not Voted</TranslatedText>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                              voter.supportStatus === 'strong' ? 'bg-blue-100 text-blue-800' :
+                              voter.supportStatus === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              voter.supportStatus === 'weak' ? 'bg-orange-100 text-orange-800' :
+                              voter.supportStatus === 'against' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {voter.supportStatus ? voter.supportStatus.charAt(0).toUpperCase() + voter.supportStatus.slice(1) : 'Unknown'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="text-center">
+              <FiDownload className="mx-auto text-3xl text-green-600 mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                <TranslatedText>Export to Excel</TranslatedText>
+              </h3>
+              <p className="text-gray-600 mb-6">
+                <TranslatedText>Enter admin password to export</TranslatedText> {filteredVoters.length} <TranslatedText>voters</TranslatedText>
+              </p>
+              
+              <input
+                type="password"
+                value={exportPassword}
+                onChange={(e) => setExportPassword(e.target.value)}
+                placeholder="Enter admin password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 mb-4"
+                onKeyPress={(e) => e.key === 'Enter' && handleExportConfirm()}
+              />
+              
+              {exportError && (
+                <p className="text-red-500 text-sm mb-4">{exportError}</p>
+              )}
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowExportModal(false);
+                    setExportPassword('');
+                    setExportError('');
+                  }}
+                  className="flex-1 px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <TranslatedText>Cancel</TranslatedText>
+                </button>
+                <button
+                  onClick={handleExportConfirm}
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <TranslatedText>Export</TranslatedText>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
